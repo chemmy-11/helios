@@ -1,0 +1,28 @@
+{
+  "name": "helios-workshop",
+  "displayName": "赫利俄斯工坊",
+  "version": "1.0.0",
+  "description": "Multi-agent game development toolkit for 'The Chain of Helios' - a sci-fi investigation game where three robot characters are actual local LLM agents with Asimov's Three Laws personalities",
+  "descriptionZh": "《赫利俄斯之链》多Agent游戏开发工具包——科幻调查推理游戏，三台机器人由本地LLM Agent驱动，基于阿西莫夫三定律人格编码",
+  "author": {
+    "name": "Mingyang Chen"
+  },
+  "category": "engineering",
+  "tags": [
+    "game-dev",
+    "multi-agent",
+    "narrative-game",
+    "asimov",
+    "pixel-art"
+  ],
+  "skills": [
+    "./skills/Agent人格构建",
+    "./skills/多Agent编排",
+    "./skills/导演Agent",
+    "./skills/语义评估",
+    "./skills/线索与记忆",
+    "./skills/伦理约束框架",
+    "./skills/调查界面",
+    "./skills/过场与动画"
+  ]
+}

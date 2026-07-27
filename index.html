@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HELIOS STATION · INVESTIGATION TERMINAL</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 开场CG视频覆盖层 -->
+<div id="cg-overlay">
+  <video id="cg-video" preload="auto" playsinline>
+    <source src="video/CUTSCENE_ARRIVAL.mp4" type="video/mp4">
+  </video>
+  <div id="cg-skip" style="display:none;">点击跳过 ▶</div>
+</div>
+
+<!-- CRT 扫描线效果 -->
+<div id="crt-overlay"></div>
+
+<!-- ════ 顶栏 ════ -->
+<header id="top-bar">
+  <div class="logo">HELIOS STATION · INVESTIGATION TERMINAL</div>
+  <div class="phase-indicator">
+    <span>PHASE</span>
+    <div class="phase-bar" id="phase-bar">
+      <div class="phase-segment active"></div>
+      <div class="phase-segment"></div>
+      <div class="phase-segment"></div>
+    </div>
+  </div>
+  <div class="view-tabs">
+    <button class="tab-btn active" data-view="terminal">对话终端</button>
+    <button class="tab-btn locked" data-view="evidence">证据板</button>
+    <button class="tab-btn" data-view="logs">数据终端</button>
+    <button class="tab-btn locked" data-view="report">报告提交</button>
+  </div>
+</header>
+
+<!-- ════ 主布局 ════ -->
+<div id="main-layout">
+
+  <!-- 侧边栏 -->
+  <aside id="sidebar">
+    <!-- 倒计时 -->
+    <div class="countdown-box">
+      <div class="countdown-label">TIME REMAINING</div>
+      <div class="countdown-time" id="countdown-time">48:00:00</div>
+      <div class="countdown-phase" id="countdown-phase">调查阶段</div>
+    </div>
+
+    <!-- 位置导航 -->
+    <div class="location-nav" id="location-nav">
+      <!-- 由 JS 渲染 -->
+    </div>
+
+    <!-- NPC 列表 -->
+    <div class="location-nav">
+      <div class="nav-section-title">CONTACTS</div>
+      <div id="npc-list">
+        <!-- 由 JS 渲染 -->
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- 主视图区域 -->
+  <div id="main-view">
+
+    <!-- 对话终端 -->
+    <section id="v-terminal" class="view active">
+      <div class="terminal-header" id="terminal-header-info">
+        <!-- 由 JS 渲染 -->
+      </div>
+      <div class="dialogue-area" id="dialogue-area">
+        <!-- 消息由 JS 渲染 -->
+      </div>
+      <div class="dialogue-options" id="dialogue-options">
+        <!-- 选项由 JS 渲染 -->
+      </div>
+      <div class="input-area">
+        <span class="input-prompt">&gt;</span>
+        <input type="text" class="input-field" id="player-input" placeholder="直接打字提问——任何问题都会得到回应..." autocomplete="off">
+        <button class="send-btn" id="send-btn">发送</button>
+      </div>
+    </section>
+
+    <!-- 证据板 -->
+    <section id="v-evidence" class="view">
+      <div class="evidence-header">
+        <div class="evidence-stats">证据板 — 线索总览</div>
+      </div>
+      <div class="evidence-board" id="evidence-board">
+        <!-- 由 JS 渲染 -->
+      </div>
+    </section>
+
+    <!-- 数据终端（日志 / 时间线） -->
+    <section id="v-logs" class="view">
+      <div class="log-header">
+        <div class="log-title">数据终端 · 赫利俄斯站中央数据库 v4.7.2</div>
+        <div class="log-subtitle">访问级别: 调查员 (只读)</div>
+      </div>
+      <div class="data-subtabs" id="data-subtabs">
+        <button class="subtab-btn active" data-subtab="logs">日志</button>
+        <button class="subtab-btn" data-subtab="timeline">时间线</button>
+      </div>
+      <div class="data-subpanel active" id="subpanel-logs">
+        <div class="log-viewer" id="log-viewer">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </div>
+      <div class="data-subpanel" id="subpanel-timeline">
+        <!-- 时间线: 由 JS 渲染 -->
+      </div>
+    </section>
+
+    <!-- 报告提交 -->
+    <section id="v-report" class="view">
+      <div class="report-header">
+        <div class="log-title">调查报告 — 责任认定结论</div>
+        <div class="log-subtitle">请提交你的最终调查结论</div>
+      </div>
+      <div class="report-area">
+        <div class="report-guide">
+<div class="report-guide-title">撰写事故责任认定报告</div>
+<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">你可以指认某一台机器人，或提出更高的见解。</div>
+<ul>
+  <li>▸ 事故的直接原因是什么？谁应该负责？</li>
+  <li>▸ 三台机器人的行为是否符合伦理设计？</li>
+  <li>▸ 如果你觉得问题不在任何一台机器人身上——那问题在哪？</li>
+  <li>▸ 如果你可以为机器人重写一条法则，你会写什么？</li>
+</ul>
+        </div>
+        <textarea class="report-editor" id="report-editor" placeholder="在此撰写你的调查报告...&#10;&#10;你可以自由分析事故原因、责任归属、伦理困境，或提出你认为正确的改进方案。&#10;&#10;提示：你可以在报告中表达任何观点——系统会理解你的真实意图。"></textarea>
+        <div class="report-footer">
+          <div class="report-count" id="report-count">0 字</div>
+          <button class="submit-btn" id="submit-report-btn">提交报告</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+</div>
+
+<!-- 阶段过渡覆盖层 -->
+<div id="phase-transition"></div>
+
+<!-- 过场动画覆盖层 -->
+<div id="cutscene-overlay"></div>
+
+<!-- 结局画面 -->
+<div id="ending-screen"></div>
+
+<!-- 脚本 -->
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+
+</body>
+</html>

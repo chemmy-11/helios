@@ -1,0 +1,13 @@
+# 不成熟版本
+v2d/
+v3d/
+
+# Reasonix 配置
+.reasonix/
+
+# 快捷方式
+*.lnk
+
+# 系统文件
+.DS_Store
+Thumbs.db
