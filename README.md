@@ -49,7 +49,14 @@
 
 **方式一：直接下载 ZIP（推荐，无需安装 Git）**
 
-**方式二：Git 克隆**
+
+**方式二：Android APP**
+
+前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载 `HELIOS.apk`，安装后即可使用。
+
+> 💡 首次打开 APP 时会提示 API Key 配置，输入后即可开始游戏。
+
+**方式三：Git 克隆**
 
 ```bash
 git clone https://github.com/chemmy-11/helios.git
@@ -71,17 +78,6 @@ Key 会自动保存到浏览器本地存储（localStorage），下次打开无�
 
 > ⚠️ **安全提示**：API Key 仅保存在你的浏览器本地，不会上传到任何服务器。请勿将 Key 提交到公开仓库。
 
-#### Android 手机
-
-前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载 `HELIOS.apk`，安装后即可使用。
-
-移动端采用仿 AI 对话 App 的 UI 设计：
-- **抽屉菜单**（☰）：左侧滑出，包含倒计时、NPC 列表、地点导航、视图切换
-- **底部导航栏**：对话 / 证据 / 日志 / 报告 四个标签快速切换
-- **消息对齐**：NPC 消息靠左显示，玩家消息靠右显示
-- **单列布局**：证据板、日志、报告自适应手机屏幕
-
-> 💡 首次打开 APP 时会提示 API Key 配置，输入后即可开始游戏。
 
 ### 4. 开始调查
 
