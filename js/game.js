@@ -51,17 +51,7 @@ const Game = {
     this.renderTimeline();
     this.renderLocationView();
     this.startGameLoop();
-    
-    // 🔧 调试模式：直接跳到报告提交阶段
-    this.state.phase = 3;
-    this.state.gameTime = 40; // 设置到40小时（阶段3时间范围）
-    this.unlockView('evidence');
-    this.unlockView('report');
-    this.renderLogViewer(); // 重新渲染以解锁所有日志
-    this.switchView('report'); // 直接显示报告视图
-    this.addSystemMessage('[调试模式] 已直接进入报告提交阶段。');
-    
-    this.showPhaseTransition(3);
+    this.showPhaseTransition(1);
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
     this.checkApiKey();
     console.log('[HELIOS] Game initialized.');
@@ -1344,9 +1334,12 @@ const Game = {
     if (!viewer) return;
     
     let html = '';
+    // 复盘模式：good 或 success 结局都解锁所有日志
+    const isReviewMode = this.state.ending === 'success' || this.state.ending === 'good';
+    
     GAME_DATA.logs.forEach(log => {
-      const isLocked = (log.access === 'phase2' && this.state.phase < 2) || (log.access === 'success' && this.state.ending !== 'success');
-      const lockLabel = log.access === 'phase2' ? '阶段二解锁' : (log.access === 'success' ? '大成功结局解锁' : '');
+      const isLocked = (log.access === 'phase2' && this.state.phase < 2) || (log.access === 'success' && !isReviewMode);
+      const lockLabel = log.access === 'phase2' ? '阶段二解锁' : (log.access === 'success' ? '结局解锁' : '');
       
       html += `<div class="log-entry-card ${isLocked ? 'locked' : ''}" data-log-id="${log.id}">`;
       html += `<div class="log-entry-header">`;
