@@ -2,6 +2,10 @@
 v2d/
 v3d/
 
+# AIGC 素材（与游戏核心无关）
+AIGC/
+video/
+
 # Reasonix 配置
 .reasonix/
 

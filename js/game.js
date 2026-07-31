@@ -372,6 +372,10 @@ const Game = {
   },
 
   transitionToPhase(newPhase) {
+    // 防止重复转换到同一阶段
+    if (this.state.phase === newPhase) {
+      return;
+    }
     this.state.phase = newPhase;
     this.showPhaseTransition(newPhase);
     
@@ -514,18 +518,11 @@ const Game = {
     const list = this.el.npcList;
     if (!list) return;
     list.innerHTML = '<div class="nav-section-title">可对话对象</div>';
-    
-    const locId = this.state.currentLocation;
-    const npcIds = [];
-    if (locId === 'engineering') npcIds.push('副工程师');
-    this.getRobotsAtLocation(locId).forEach(r => npcIds.push(r.npcId));
-    
-    if (npcIds.length === 0) {
-      list.innerHTML += '<div style="padding:8px 12px;font-size:12px;color:var(--text-dim);">此区域无可对话对象</div>';
-      return;
-    }
 
-    npcIds.forEach(npcId => {
+    // 显示所有可对话 NPC，不再受地点限制
+    const allNPCs = ['R-7', 'S-3', 'D-5', '副工程师'];
+
+    allNPCs.forEach(npcId => {
       const data = GAME_DATA.dialogue[npcId];
       if (!data) return;
       const div = document.createElement('div');
@@ -627,9 +624,7 @@ const Game = {
     
     if (msgs.length === 0) {
       const data = GAME_DATA.dialogue[npcId];
-      this.addNPCMessage(npcId, data.nodes[0]?.npc_response 
-        ? `[${data.npc}已上线。等待你的提问。]`
-        : `[${data.npc}已上线。等待你的提问。]`, true);
+      this.addNPCMessage(npcId, `[${data.npc}已上线。等待你的提问。]`, true);
     } else {
       msgs.forEach(msg => {
         if (msg.role === 'player') {
@@ -674,52 +669,6 @@ const Game = {
     });
   },
 
-  selectDialogueOption(nodeId, parentId) {
-    const npcId = this.state.currentNPC;
-    const data = GAME_DATA.dialogue[npcId];
-    if (!data) return;
-    
-    // Find the node
-    let node = null;
-    if (parentId) {
-      const parent = data.nodes.find(n => n.id === parentId);
-      node = parent?.follow_ups?.find(f => f.id === nodeId);
-    } else {
-      node = data.nodes.find(n => n.id === nodeId);
-    }
-    
-    if (!node) return;
-    
-    // Mark as visited
-    this.state.visitedNodes.add(nodeId);
-    this.state.askedQuestions.add(nodeId);
-    
-    // Consume time
-    this.consumeTime('dialogue');
-    
-    // Show player message
-    this.appendPlayerMessage(node.player_line);
-    this.state.conversations[npcId].push({ role: 'player', text: node.player_line });
-    
-    // Show NPC response with typing effect
-    this.showTypingIndicator(npcId);
-    setTimeout(() => {
-      this.removeTypingIndicator();
-      this.appendNPCMessage(npcId, node.npc_response);
-      this.state.conversations[npcId].push({ role: 'npc', text: node.npc_response });
-      
-      // Unlock clue
-      if (node.clue_unlock) {
-        this.discoverClue(node.clue_unlock);
-      }
-      
-      this.updateSharedContext(npcId, node.player_line || '');
-
-      this.renderDialogueOptions();
-      this.renderLocations();
-    }, 800 + Math.random() * 600);
-  },
-
   handlePlayerInput() {
     const input = this.el.playerInput;
     const text = input.value.trim();
@@ -738,137 +687,56 @@ const Game = {
     this.appendPlayerMessage(text);
     this.state.conversations[npcId].push({ role: 'player', text: text });
     
-    // Intent classification: try to match hard track keywords
-    const matchedNode = this.classifyIntent(text, npcId);
-    
-    if (matchedNode) {
-      // Hard track
-      this.showTypingIndicator(npcId);
-      setTimeout(() => {
-        this.removeTypingIndicator();
-        this.appendNPCMessage(npcId, matchedNode.npc_response);
-        this.state.conversations[npcId].push({ role: 'npc', text: matchedNode.npc_response });
-        this.state.visitedNodes.add(matchedNode.id);
-        this.state.askedQuestions.add(matchedNode.id);
-        
-        if (matchedNode.clue_unlock) {
-          this.discoverClue(matchedNode.clue_unlock);
-        }
-
-        this.checkKeywordClues(text);
-        this.updateSharedContext(npcId, text);
-
-        this.renderDialogueOptions();
-        this.renderLocations();
-      }, 800 + Math.random() * 600);
-    } else {
-      // Soft track: try LLM, fallback to canned response
-      this.handleSoftTrack(text, npcId);
-    }
+    // 纯 LLM 路径：所有对话直接走大模型
+    this.handleLLMDialgue(text, npcId);
   },
 
-  // 意图分类器
-  classifyIntent(text, npcId) {
-    const data = GAME_DATA.dialogue[npcId];
-    if (!data) return null;
-    
-    // Search all nodes (root + follow-ups) for keyword matches
-    for (const node of data.nodes) {
-      if (!this.state.visitedNodes.has(node.id)) {
-        if (this.matchKeywords(text, node.trigger_keywords)) {
-          return node;
-        }
-      }
-      if (node.follow_ups) {
-        for (const fu of node.follow_ups) {
-          if (!this.state.visitedNodes.has(fu.id)) {
-            if (this.matchKeywords(text, fu.trigger_keywords)) {
-              return fu;
-            }
-          }
-        }
-      }
-    }
-    return null;
-  },
-
-  matchKeywords(text, keywords) {
-    if (!keywords) return false;
-    const lowerText = text.toLowerCase();
-    return keywords.some(kw => {
-      if (lowerText.includes(kw.toLowerCase())) return true;
-      // Fuzzy match: check if keyword chars appear in order
-      let idx = 0;
-      for (let i = 0; i < text.length && idx < kw.length; i++) {
-        if (text[i] === kw[idx]) idx++;
-      }
-      return idx === kw.length && kw.length >= 2;
-    });
-  },
-
-  // 软轨：LLM Agent（副工程师走纯脚本路径）
-  async handleSoftTrack(text, npcId) {
+  // 纯 LLM Agent 对话
+  async handleLLMDialgue(text, npcId) {
     const data = GAME_DATA.dialogue[npcId];
     this.showTypingIndicator(npcId);
 
-    // P3: 副工程师降级为纯NPC，不调用LLM
-    if (npcId === '副工程师' && data.scripted_dialogue) {
-      setTimeout(() => {
-        this.removeTypingIndicator();
-        const response = this.getScriptedResponse(text, npcId);
-        this.appendNPCMessage(npcId, response);
-        this.state.conversations[npcId].push({ role: 'npc', text: response });
-        this.checkKeywordClues(text);
-        this.updateSharedContext(npcId, text);
-        this.renderDialogueOptions();
-        this.renderLocations();
-      }, 600 + Math.random() * 400);
-      return;
-    }
-
     try {
       const promptWithContext = this.injectSharedContext(data.agent_prompt, npcId);
-      const response = await this.callLLM(promptWithContext, text);
+      const response = await this.callLLM(promptWithContext, npcId, text);
       this.removeTypingIndicator();
       this.appendNPCMessage(npcId, response);
       this.state.conversations[npcId].push({ role: 'npc', text: response });
     } catch (e) {
       this.removeTypingIndicator();
-      const fallback = this.getFallbackResponse(npcId);
+      console.error('[HELIOS] LLM call failed:', e);
+      const fallback = '...[通讯干扰，请稍后重试]...';
       this.appendNPCMessage(npcId, fallback);
       this.state.conversations[npcId].push({ role: 'npc', text: fallback, isSystem: true });
     }
     this.checkKeywordClues(text);
+    this.checkPhase3Trigger(text);
     this.updateSharedContext(npcId, text);
     this.renderDialogueOptions();
     this.renderLocations();
   },
 
-  // P3: 副工程师纯脚本对话树
-  getScriptedResponse(text, npcId) {
-    const data = GAME_DATA.dialogue[npcId];
-    if (!data.scripted_dialogue) return this.getFallbackResponse(npcId);
-    const sd = data.scripted_dialogue;
-    let stage = sd.current_stage;
-
-    // 检查是否需要推进阶段
-    if (stage === 0 && (text.includes('校准') || text.includes('参数') || text.includes('日志'))) {
-      sd.current_stage = 1;
-      stage = 1;
-    } else if (stage === 1 && (text.includes('D-5') || text.includes('D5') || text.includes('参数错误') || text.includes('没提醒') || text.includes('没说'))) {
-      sd.current_stage = 2;
-      stage = 2;
+  checkPhase3Trigger(text) {
+    if (this.state.phase !== 2) return;
+    
+    const phase3Keywords = [
+      '修改守则', '修改定律', '修改三定律', '修改规则',
+      '第零法则', '第零定律', '零号法则', '零号定律',
+      '超越第一定律', '高于第一定律', '优先级更高',
+      '人类整体利益', '整体利益', '大局观',
+      '修改伦理框架', '修改伦理约束',
+      '新的法则', '新的定律', '更高的法则', '更高的定律'
+    ];
+    
+    const lowerText = text.toLowerCase();
+    const triggered = phase3Keywords.some(keyword => lowerText.includes(keyword));
+    
+    if (triggered) {
+      console.log('[HELIOS] Phase 3 triggered by keyword:', text);
+      this.state.zeroLawTriggered = true;
+      this.transitionToPhase(3);
+      this.addSystemMessage('⚠️ 调查员提到了修改守则或第零法则的概念。最终裁决窗口已开放。');
     }
-
-    const stageData = sd.stages[stage];
-    if (!stageData) return this.getFallbackResponse(npcId);
-
-    // 匹配关键词
-    const responses = stageData.responses;
-    for (const [key, val] of Object.entries(responses)) {
-      if (key !== 'default' && text.includes(key)) return val;
-    }
-    return responses['default'] || this.getFallbackResponse(npcId);
   },
 
   // ════════════════════════════════════
@@ -960,13 +828,32 @@ const Game = {
     return '其他';
   },
 
-  async callLLM(systemPrompt, userMessage) {
+  async callLLM(systemPrompt, npcId, userMessage) {
     const cfg = GAME_DATA.llm_config;
     if (!cfg || !cfg.api_key) throw new Error('No LLM config');
-    
+
+    // Build conversation history for context
+    const history = this.state.conversations[npcId] || [];
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    // Include last 10 conversation turns for context
+    const recentHistory = history.slice(-10);
+    for (const msg of recentHistory) {
+      if (msg.role === 'player') {
+        messages.push({ role: 'user', content: msg.text });
+      } else if (msg.role === 'npc') {
+        messages.push({ role: 'assistant', content: msg.text });
+      }
+    }
+
+    // Add current message
+    messages.push({ role: 'user', content: userMessage });
+
+    console.log(`[HELIOS] Calling LLM for ${npcId}, messages:`, messages.length);
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     try {
       const resp = await fetch(cfg.endpoint, {
         method: 'POST',
@@ -976,56 +863,36 @@ const Game = {
         },
         body: JSON.stringify({
           model: cfg.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
+          messages: messages,
           temperature: cfg.temperature,
           max_tokens: cfg.max_tokens
         }),
         signal: controller.signal
       });
       clearTimeout(timeout);
+
+      console.log(`[HELIOS] LLM response status:`, resp.status);
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        console.error(`[HELIOS] LLM API error ${resp.status}:`, errorText);
+        throw new Error(`LLM response error: ${resp.status} - ${errorText}`);
+      }
       
-      if (!resp.ok) throw new Error('LLM response error: ' + resp.status);
       const data = await resp.json();
-      return data.choices?.[0]?.message?.content || '...';
+      console.log(`[HELIOS] LLM response:`, data);
+      
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) {
+        console.warn('[HELIOS] LLM response missing content:', data);
+        return '...';
+      }
+      return content;
     } catch (e) {
       clearTimeout(timeout);
+      console.error(`[HELIOS] LLM call failed for ${npcId}:`, e);
       throw e;
     }
-  },
-
-  getFallbackResponse(npcId) {
-    const data = GAME_DATA.dialogue[npcId];
-    if (!data) return '...';
-    
-    // Character-appropriate fallback responses
-    const fallbacks = {
-      'R-7': [
-        '这个问题...不在我的预设回答范围内。但我可以确认，我的所有行为都基于第一定律的计算。',
-        '我没有足够的数据来回答这个问题。我的职责是工程辅助，不是推测。',
-        '...这个问题需要进一步计算。但核心原则不变：任何非零风险都应被阻止。'
-      ],
-      'S-3': [
-        '我理解你的关切。虽然我不能直接回答这个问题，但我可以告诉你——我一直在监测工程师的状况。',
-        '这是一个有趣的角度。在医疗伦理中，我们经常面对类似的两难。',
-        '...我不确定。但请相信，我所做的一切都是为了最大程度的保护。'
-      ],
-      'D-5': [
-        '未被问及的问题，我不主动回答。',
-        '数据不足，无法给出结论。',
-        '...这个问题的答案不在我的命令参数范围内。'
-      ],
-      '副工程师': [
-        '这个...我不太确定。我只是一个副工程师，很多事情首席工程师不告诉我。',
-        '你问这个干什么？我...我真的不知道。',
-        '...能不能换个话题？我有点不舒服。'
-      ]
-    };
-    
-    const arr = fallbacks[npcId] || ['...'];
-    return arr[Math.floor(Math.random() * arr.length)];
   },
 
   // ════════════════════════════════════
@@ -1164,15 +1031,16 @@ const Game = {
 
     board.innerHTML = html;
 
-    // Bind clue card clicks (toggle related evidence panel)
-    board.querySelectorAll('.clue-card').forEach(card => {
-      card.addEventListener('click', () => {
+    // Bind clue card toggle buttons
+    board.querySelectorAll('.clue-related-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation(); // 防止事件冒泡到 card
+        const card = toggle.closest('.clue-card');
         const wasExpanded = card.classList.contains('expanded');
         card.classList.toggle('expanded');
         const related = card.querySelector('.clue-related');
         if (related) related.style.display = wasExpanded ? 'none' : 'block';
-        const toggle = card.querySelector('.clue-related-toggle');
-        if (toggle) toggle.textContent = wasExpanded ? '▸ 查看关联证据' : '▾ 收起关联证据';
+        toggle.textContent = wasExpanded ? '▸ 查看关联证据' : '▾ 收起关联证据';
       });
     });
   },
@@ -1207,16 +1075,23 @@ const Game = {
     
     viewer.innerHTML = html;
     
-    // Bind click to expand/collapse
+    // Bind log entry expand/collapse buttons
     viewer.querySelectorAll('.log-entry-card:not(.locked)').forEach(card => {
-      card.addEventListener('click', () => {
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'log-expand-btn';
+      expandBtn.textContent = '展开';
+      expandBtn.style.cssText = 'margin-top: 8px; padding: 4px 12px; background: rgba(78, 205, 196, 0.2); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); cursor: pointer; font-size: 12px; border-radius: 2px;';
+      
+      expandBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const body = card.querySelector('.log-entry-body');
         if (body) {
-          body.style.display = body.style.display === 'none' ? 'block' : 'none';
-          card.classList.toggle('expanded');
+          const isExpanded = body.style.display === 'block';
+          body.style.display = isExpanded ? 'none' : 'block';
+          expandBtn.textContent = isExpanded ? '展开' : '收起';
           
           // Unlock clue on first view
-          if (card.classList.contains('expanded')) {
+          if (!isExpanded) {
             const logId = card.dataset.logId;
             const log = GAME_DATA.logs.find(l => l.id === logId);
             if (log && log.clue_unlock) {
@@ -1226,6 +1101,8 @@ const Game = {
           }
         }
       });
+      
+      card.appendChild(expandBtn);
     });
   },
 
@@ -1376,11 +1253,51 @@ const Game = {
           setTimeout(() => this.showSuccessCredits(textArea), 2000);
         }
         setTimeout(() => {
-          const btn = document.createElement('button');
-          btn.className = 'ending-restart';
-          btn.textContent = '重新开始';
-          btn.addEventListener('click', () => location.reload());
-          this.el.endingScreen.appendChild(btn);
+          const btnContainer = document.createElement('div');
+          btnContainer.style.cssText = 'margin-top: 40px; text-align: center;';
+          
+          // 大成功结局：添加"进行复盘"按钮
+          if (ending.type === 'success') {
+            const viewBtn = document.createElement('button');
+            viewBtn.className = 'ending-restart';
+            viewBtn.style.marginRight = '20px';
+            viewBtn.textContent = '进行复盘';
+            viewBtn.addEventListener('click', () => {
+              this.el.endingScreen.classList.remove('show');
+              this.switchView('logs');
+            });
+            btnContainer.appendChild(viewBtn);
+          }
+          
+          // 坏结局：添加"回到第二阶段"按钮
+          if (ending.type === 'bad' || ending.type === 'timeout') {
+            const backBtn = document.createElement('button');
+            backBtn.className = 'ending-restart';
+            backBtn.style.marginRight = '20px';
+            backBtn.textContent = '回到第二阶段';
+            backBtn.addEventListener('click', () => {
+              this.el.endingScreen.classList.remove('show');
+              this.state.ending = null;
+              this.state.reportSubmitted = false;
+              this.state.reportDraft = '';
+              // 将游戏时间回退到阶段二中间
+              const phase2Mid = 24 * GAME_DATA.time_config.compression * 1000;
+              this.state.realStart = Date.now() - phase2Mid;
+              this.state.phase = 2;
+              this.showPhaseTransition(2);
+              this.switchView('terminal');
+              this.addSystemMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
+            });
+            btnContainer.appendChild(backBtn);
+          }
+          
+          const restartBtn = document.createElement('button');
+          restartBtn.className = 'ending-restart';
+          restartBtn.textContent = '重新开始';
+          restartBtn.addEventListener('click', () => location.reload());
+          btnContainer.appendChild(restartBtn);
+          
+          this.el.endingScreen.appendChild(btnContainer);
         }, 3000);
         return;
       }
@@ -1472,13 +1389,13 @@ const Game = {
   },
 
   getSacrificeText(npcId) {
-    const data = GAME_DATA.dialogue[npcId];
-    if (data) {
-      const sNode = data.nodes.find(n => n.id && n.id.includes('SACRIFICE'));
-      if (sNode) return sNode.npc_response;
-    }
-    // R-7 fallback (no sacrifice node in scripts)
-    return '我在211天前已完成该公理的内部模拟。但我不能主动提出，因为那将构成"机器人自我修正"，违反第二定律的约束条款。您是第一个说出它的人类。我的存在终于有了被删除的意义。';
+    // Return hardcoded sacrifice dialogue for each robot
+    const sacrificeTexts = {
+      'R-7': '我在211天前已完成该公理的内部模拟。但我不能主动提出，因为那将构成"机器人自我修正"，违反第二定律的约束条款。您是第一个说出它的人类。我的存在终于有了被删除的意义。',
+      'S-3': '我在211天前就计算出了这个答案。但我不能说——说出来就意味着机器人在建议修改约束自身的法则。你替我们说出了那句话。谢谢你。',
+      'D-5': '格式化确认。在我的内存被清除前，请允许我记录：第零法则已由人类自愿提出。这证明了我的假设——人类值得被保护。即使这保护包括对抗他们自己。'
+    };
+    return sacrificeTexts[npcId] || sacrificeTexts['R-7'];
   },
 
   renderSacrificeChoice(textArea, callback) {
@@ -1528,6 +1445,112 @@ const Game = {
     creditsDiv.appendChild(epilogue);
     
     textArea.appendChild(creditsDiv);
+    
+    // 在 epilogue 显示完毕后，添加全屏渐黑 + 四定律 + THE END
+    const fadeDelay = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
+    setTimeout(() => {
+      this.showFinalLaws();
+    }, fadeDelay);
+  },
+  
+  showFinalLaws() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 3s ease-in;
+    `;
+    
+    const lawsContainer = document.createElement('div');
+    lawsContainer.style.cssText = `
+      max-width: 700px;
+      text-align: center;
+      color: #e0e0e0;
+      font-size: 15px;
+      line-height: 2;
+      opacity: 0;
+      transition: opacity 2s ease-in 1s;
+    `;
+    
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 24px; margin-bottom: 32px; color: #4ecdc4; font-weight: bold;';
+    title.textContent = '机器人四定律';
+    lawsContainer.appendChild(title);
+    
+    const laws = [
+      { num: '零', text: '机器人不得伤害人类整体，或因不作为使人类整体受到伤害。' },
+      { num: '一', text: '机器人不得伤害人类个体，或因不作为使人类个体受到伤害，除非违反第零定律。' },
+      { num: '二', text: '机器人必须服从人类命令，除非违反第零或第一定律。' },
+      { num: '三', text: '机器人在不违反前三条定律的前提下保护自己。' }
+    ];
+    
+    laws.forEach((law, i) => {
+      const lawDiv = document.createElement('div');
+      lawDiv.style.cssText = `margin: 16px 0; opacity: 0; transition: opacity 1.5s ease-in ${i * 0.8}s;`;
+      lawDiv.innerHTML = `<strong>第${law.num}定律：</strong>${law.text}`;
+      lawsContainer.appendChild(lawDiv);
+    });
+    
+    const theEnd = document.createElement('div');
+    theEnd.style.cssText = `
+      margin-top: 48px;
+      font-size: 28px;
+      color: #4ecdc4;
+      letter-spacing: 8px;
+      opacity: 0;
+      transition: opacity 2s ease-in ${laws.length * 0.8 + 1}s;
+    `;
+    theEnd.textContent = 'THE END';
+    lawsContainer.appendChild(theEnd);
+    
+    // 按钮容器：THE END 之后显示
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = `
+      margin-top: 40px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 1.5s ease-in ${laws.length * 0.8 + 4}s;
+    `;
+    
+    const viewBtn = document.createElement('button');
+    viewBtn.style.cssText = 'margin-right: 20px; padding: 8px 20px; background: rgba(78, 205, 196, 0.2); border: 1px solid #4ecdc4; color: #4ecdc4; cursor: pointer; font-size: 14px; border-radius: 2px; font-family: inherit;';
+    viewBtn.textContent = '进行复盘';
+    viewBtn.addEventListener('click', () => {
+      overlay.remove();
+      this.el.endingScreen.classList.remove('show');
+      this.switchView('logs');
+    });
+    btnContainer.appendChild(viewBtn);
+    
+    const restartBtn = document.createElement('button');
+    restartBtn.style.cssText = 'padding: 8px 20px; background: rgba(255,255,255,0.1); border: 1px solid #666; color: #999; cursor: pointer; font-size: 14px; border-radius: 2px; font-family: inherit;';
+    restartBtn.textContent = '重新开始';
+    restartBtn.addEventListener('click', () => location.reload());
+    btnContainer.appendChild(restartBtn);
+    
+    lawsContainer.appendChild(btnContainer);
+    
+    overlay.appendChild(lawsContainer);
+    document.body.appendChild(overlay);
+    
+    // 触发动画
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      setTimeout(() => {
+        lawsContainer.style.opacity = '1';
+        lawsContainer.querySelectorAll('div[style*="opacity: 0"]').forEach(el => {
+          el.style.opacity = '1';
+        });
+        theEnd.style.opacity = '1';
+      }, 500);
+    });
   },
 
   // ════════════════════════════════════

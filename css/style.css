@@ -238,6 +238,27 @@ body {
   cursor: not-allowed;
 }
 
+.npc-item {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-dim);
+  border-left: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.npc-item:hover {
+  background: var(--bg-highlight);
+  color: var(--text-main);
+}
+
+.npc-item.active {
+  background: var(--bg-highlight);
+  color: var(--data-cyan);
+  border-left-color: var(--data-cyan);
+}
+
 /* === MAIN VIEW AREA === */
 #main-view {
   flex: 1;
