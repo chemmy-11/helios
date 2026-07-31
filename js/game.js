@@ -130,6 +130,13 @@ const Game = {
     this.el.apiKeyModalInput = document.getElementById('api-key-modal-input');
     this.el.apiKeyModalSubmit = document.getElementById('api-key-modal-submit');
     this.el.apiKeyModalSkip = document.getElementById('api-key-modal-skip');
+    // Mobile elements
+    this.el.hamburgerBtn = document.getElementById('hamburger-btn');
+    this.el.drawerOverlay = document.getElementById('drawer-overlay');
+    this.el.bottomNav = document.getElementById('mobile-bottom-nav');
+    this.el.mobileCountdown = document.getElementById('mobile-countdown');
+    this.el.drawerNavLinks = document.querySelectorAll('#drawer-nav-links .drawer-nav-item');
+    this.el.bottomNavItems = document.querySelectorAll('#mobile-bottom-nav .bottom-nav-item');
   },
 
   bindEvents() {
@@ -203,6 +210,49 @@ const Game = {
           e.preventDefault();
           this.handleApiKeySubmit();
         }
+      });
+    }
+
+    // Mobile: hamburger drawer toggle
+    if (this.el.hamburgerBtn) {
+      this.el.hamburgerBtn.addEventListener('click', () => {
+        document.body.classList.toggle('drawer-open');
+        if (this.el.drawerOverlay) {
+          this.el.drawerOverlay.classList.toggle('show');
+        }
+      });
+    }
+
+    // Mobile: drawer overlay click to close
+    if (this.el.drawerOverlay) {
+      this.el.drawerOverlay.addEventListener('click', () => {
+        document.body.classList.remove('drawer-open');
+        this.el.drawerOverlay.classList.remove('show');
+      });
+    }
+
+    // Mobile: bottom nav view switching
+    if (this.el.bottomNavItems) {
+      this.el.bottomNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+          if (item.classList.contains('locked')) return;
+          this.switchView(item.dataset.view);
+        });
+      });
+    }
+
+    // Mobile: drawer nav links view switching
+    if (this.el.drawerNavLinks) {
+      this.el.drawerNavLinks.forEach(item => {
+        item.addEventListener('click', () => {
+          if (item.classList.contains('locked')) return;
+          this.switchView(item.dataset.view);
+          // Close drawer after navigation
+          document.body.classList.remove('drawer-open');
+          if (this.el.drawerOverlay) {
+            this.el.drawerOverlay.classList.remove('show');
+          }
+        });
       });
     }
 
@@ -421,6 +471,15 @@ const Game = {
       else if (remaining < 12) this.el.countdown.classList.add('warning');
     }
 
+    // Mobile countdown
+    if (this.el.mobileCountdown) {
+      this.el.mobileCountdown.textContent = timeStr;
+      this.el.mobileCountdown.className = 'mobile-countdown';
+      if (remaining < 2) this.el.mobileCountdown.classList.add('critical');
+      else if (remaining < 6) this.el.mobileCountdown.classList.add('danger');
+      else if (remaining < 12) this.el.mobileCountdown.classList.add('warning');
+    }
+
     const phases = ['调查', '交叉验证', '裁决'];
     if (this.el.countdownPhase) {
       this.el.countdownPhase.textContent = phases[this.state.phase - 1] + '阶段';
@@ -504,8 +563,17 @@ const Game = {
   },
 
   unlockView(viewName) {
+    // Desktop tabs
     const btn = document.querySelector(`.tab-btn[data-view="${viewName}"]`);
     if (btn) btn.classList.remove('locked');
+    
+    // Mobile bottom nav
+    const bottomNavItem = document.querySelector(`.bottom-nav-item[data-view="${viewName}"]`);
+    if (bottomNavItem) bottomNavItem.classList.remove('locked');
+    
+    // Mobile drawer nav
+    const drawerNavItem = document.querySelector(`.drawer-nav-item[data-view="${viewName}"]`);
+    if (drawerNavItem) drawerNavItem.classList.remove('locked');
   },
 
   // ════════════════════════════════════
@@ -513,10 +581,31 @@ const Game = {
   // ════════════════════════════════════
 
   switchView(viewName) {
+    // Desktop tabs
     this.el.tabBtns.forEach(b => b.classList.remove('active'));
     document.querySelector(`.tab-btn[data-view="${viewName}"]`)?.classList.add('active');
     this.el.views.forEach(v => v.classList.remove('active'));
     document.getElementById('v-' + viewName)?.classList.add('active');
+    
+    // Mobile bottom nav
+    if (this.el.bottomNavItems) {
+      this.el.bottomNavItems.forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.view === viewName) {
+          item.classList.add('active');
+        }
+      });
+    }
+    
+    // Mobile drawer nav
+    if (this.el.drawerNavLinks) {
+      this.el.drawerNavLinks.forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.view === viewName) {
+          item.classList.add('active');
+        }
+      });
+    }
   },
 
   // ════════════════════════════════════
@@ -947,7 +1036,7 @@ const Game = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + cfg.api_key
+          'Authorization': 'Bearer ' + apiKey
         },
         body: JSON.stringify({
           model: cfg.model,

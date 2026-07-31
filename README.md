@@ -11,10 +11,11 @@
 ## 🎮 核心特色
 
 - **真实的 AI NPC 对话** — 机器人的回复由 DeepSeek 大模型实时生成，不是预设脚本，每次游玩体验不同
-- **阿西莫夫三定律编码** — 每台机器人拥有独立的人格 System Prompt，分别代表对三定律的不同哲学解读
-- **多结局分支** — 自由撰写调查报告，语义引擎自动判定结局走向
+- **阿西莫夫三定律编码** — 每台机器人拥有独立的人格 System Prompt（FIRMWARE + 一致性锚点），分别代表对三定律的绝对主义/功利主义/字面主义解读
+- **多结局分支** — 自由撰写调查报告，语义引擎自动判定结局走向（含隐藏的第零法则觉醒结局）
 - **48 小时倒计时** — 机制驱动的叙事节奏，调查阶段自动推进
-- **纯浏览器运行** — 无需安装任何依赖，打开网页即可游玩
+- **响应式布局** — 同时支持桌面浏览器和 Android 手机（仿 AI 对话 App 的移动端 UI）
+- **纯前端运行** — 无需安装任何后端依赖，打开网页即可游玩
 
 ---
 
@@ -46,9 +47,11 @@
 
 ### 1. 下载游戏
 
+**方式一：直接下载 ZIP（推荐，无需安装 Git）**
+
 前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载最新版本的 ZIP 包，解压到任意目录。
 
-或者，如果你已安装 [Git](https://git-scm.com/download/win)，可以直接克隆：
+**方式二：Git 克隆**
 
 ```bash
 git clone https://github.com/chemmy-11/helios.git
@@ -60,6 +63,8 @@ git clone https://github.com/chemmy-11/helios.git
 
 ### 3. 启动游戏
 
+#### 桌面浏览器
+
 **直接双击 `index.html` 即可打开游戏。**
 
 游戏启动后会弹出 API Key 配置窗口，将第 2 步获取的 Key 粘贴进去，点击确认即可开始游玩。
@@ -67,6 +72,18 @@ git clone https://github.com/chemmy-11/helios.git
 Key 会自动保存到浏览器本地存储（localStorage），下次打开无需重新输入。
 
 > ⚠️ **安全提示**：API Key 仅保存在你的浏览器本地，不会上传到任何服务器。请勿将 Key 提交到公开仓库。
+
+#### Android 手机
+
+前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载 `HELIOS.apk`，安装后即可使用。
+
+移动端采用仿 AI 对话 App 的 UI 设计：
+- **抽屉菜单**（☰）：左侧滑出，包含倒计时、NPC 列表、地点导航、视图切换
+- **底部导航栏**：对话 / 证据 / 日志 / 报告 四个标签快速切换
+- **消息对齐**：NPC 消息靠左显示，玩家消息靠右显示
+- **单列布局**：证据板、日志、报告自适应手机屏幕
+
+> 💡 首次打开 APP 时会提示 API Key 配置，输入后即可开始游戏。
 
 ### 4. 开始调查
 
@@ -117,7 +134,8 @@ npx serve .
 helios/
 ├── index.html                  # 主入口 — 游戏 UI
 ├── css/
-│   └── style.css               # CRT 科幻终端风格样式
+│   ├── style.css               # CRT 科幻终端风格样式（桌面端）
+│   └── mobile.css              # 移动端响应式样式（20:9 屏幕适配）
 ├── js/
 │   ├── data.js                 # 游戏数据：NPC 人设 Prompt、线索、结局、LLM 配置
 │   └── game.js                 # 游戏引擎：对话系统、阶段管理、结局判定
@@ -140,17 +158,19 @@ helios/
               ├─ 注入 System Prompt（角色人设 + 三定律 FIRMWARE + 一致性锚点）
               ├─ 注入共享记忆（其他机器人的对话摘要）
               ├─ 拼接最近 10 轮对话历史
-              └─ 调用 DeepSeek API
+              └─ 调用 DeepSeek API（从 localStorage 读取用户 API Key）
                     │
                     ▼
               NPC 回复 → 关键词线索检测 → 阶段推进 → 结局判定
 ```
 
 - **前端**：原生 HTML/CSS/JS，科幻终端美学（CRT 扫描线、像素字体）
+- **移动端**：响应式 CSS（`mobile.css`），仿 AI 对话 App 布局（抽屉菜单 + 底部导航）
 - **AI 引擎**：DeepSeek Chat API，实时生成 NPC 对话
 - **对话上下文**：每次调用传入 System Prompt + 共享记忆 + 最近 10 轮对话
 - **语义判定**：自由文本报告 → 多维度关键词匹配 → 结局分流
 - **无后端**：纯浏览器端运行，API 调用直连 DeepSeek
+- **Android**：基于 Capacitor 打包，WebView 渲染本地 HTML/CSS/JS
 
 ---
 
@@ -168,6 +188,27 @@ helios/
 | 语义评估 | LLM 评估玩家报告的语义判定引擎 |
 | 调查界面 | Web 调查 UI：对话终端、证据板、倒计时 |
 | 过场与动画 | CG 过场、像素动画与转场效果 |
+
+---
+
+## 📱 Android 构建
+
+本项目使用 [Capacitor](https://capacitorjs.com/) 将 Web 应用打包为 Android APK。
+
+构建步骤：
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 同步 Web 资源到 Android 项目
+npx cap sync android
+
+# 3. 构建 Debug APK
+cd android && ./gradlew assembleDebug
+
+# 4. APK 输出位置
+android/app/build/outputs/apk/debug/app-debug.apk
+```
 
 ---
 
