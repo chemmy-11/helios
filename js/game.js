@@ -1244,6 +1244,10 @@ const Game = {
 
   // 解锁所有证据和时间线（用于复盘阶段）
   unlockAllEvidence() {
+    console.log('[DEBUG] unlockAllEvidence() 开始执行');
+    console.log('[DEBUG] evidenceBoard 元素:', this.el.evidenceBoard);
+    console.log('[DEBUG] subpanelTimeline 元素:', this.el.subpanelTimeline);
+    
     // 1. 将所有线索标记为已发现
     GAME_DATA.clues.forEach(clue => {
       if (!this.state.discoveredClues.has(clue.id)) {
@@ -1251,17 +1255,22 @@ const Game = {
         clue.discovered = true;
       }
     });
+    console.log('[DEBUG] 已解锁线索数:', this.state.discoveredClues.size);
     
     // 2. 重新渲染证据板
+    console.log('[DEBUG] 调用 renderEvidenceBoard()');
     this.renderEvidenceBoard();
     
     // 3. 重新渲染时间线
+    console.log('[DEBUG] 调用 renderTimeline()');
     this.renderTimeline();
     
     // 4. 重新渲染日志查看器（解锁所有日志）
+    console.log('[DEBUG] 调用 renderLogViewer()');
     this.renderLogViewer();
     
     this.addSystemMessage('[复盘模式] 所有证据和时间线已解锁，供您回顾。');
+    console.log('[DEBUG] unlockAllEvidence() 执行完成');
   },
 
   // 重写：证据板渲染 + 证据-日志关联面板（P2）
