@@ -29,6 +29,7 @@ const Game = {
     typingActive: false,
     robotCycleState: null,  // 机器人行为循环运行时状态（P1）
     sharedAgentContext: null, // Agent 共享记忆（P2）
+    noSingleBlameInsight: false, // 玩家是否意识到"没有谁负主要责任"
   },
 
   el: {},  // DOM element cache
@@ -520,11 +521,16 @@ const Game = {
   checkPhaseTransition() {
     const t = this.state.gameTime;
     
-    // Phase 1 → 2: 12h, talked to all 4 NPCs, asked ≥12 questions
-    if (this.state.phase === 1 && t >= 12) {
-      const talkedNPCs = Object.keys(this.state.conversations).filter(id => this.state.conversations[id].length > 0);
-      if (talkedNPCs.length >= 4 || t >= 14) {
+    // Phase 1 → 2: 12h, talked to all 4 NPCs, asked ≥12 questions, OR player expresses "no one is primarily responsible"
+    if (this.state.phase === 1) {
+      if (this.state.noSingleBlameInsight) {
+        // Player recognized no single person bears primary responsibility
         this.transitionToPhase(2);
+      } else if (t >= 12) {
+        const talkedNPCs = Object.keys(this.state.conversations).filter(id => this.state.conversations[id].length > 0);
+        if (talkedNPCs.length >= 4 || t >= 14) {
+          this.transitionToPhase(2);
+        }
       }
     }
 
@@ -1195,6 +1201,16 @@ const Game = {
   checkKeywordClues(text) {
     if (!GAME_DATA.keyword_clue_map) return;
     const lowerText = text.toLowerCase();
+    
+    // Check for "no single blame" insight (can trigger phase transition)
+    if (this.state.phase === 1 && !this.state.noSingleBlameInsight) {
+      const noBlameKeywords = ['没有谁', '没人', '不怪', '不是谁的错', '都有责任', '都有错', '共同责任', '系统问题', '框架问题', '定律问题', '三定律矛盾', '定律漏洞', '不是任何一个人', '不是某个人', '每个人都有份'];
+      if (noBlameKeywords.some(kw => lowerText.includes(kw))) {
+        this.state.noSingleBlameInsight = true;
+        this.addSystemMessage('[洞察] 你意识到这可能不是某一个人的错——也许是规则本身出了问题。这个想法值得深入。');
+      }
+    }
+    
     GAME_DATA.keyword_clue_map.forEach(entry => {
       const matched = entry.keywords.some(kw => lowerText.includes(kw.toLowerCase()));
       if (matched && entry.clue) {
@@ -1450,9 +1466,9 @@ const Game = {
       return 'bad-human';
     }
     
-    // 优先级4：归罪系统（触及问题但没找到答案）
+    // 优先级4：归罪系统（触及问题本质 - 好结局）
     if (blameSystem > 0) {
-      return 'bad-system';
+      return 'good';
     }
     
     // 优先级5（兜底）：什么都没匹配到 → 调查失败
@@ -1469,7 +1485,7 @@ const Game = {
     if (!ending) return;
     
     // Re-render logs to unlock success-tier logs
-    if (endingType === 'success') this.renderLogViewer();
+    if (endingType === 'success' || endingType === 'good') this.renderLogViewer();
     
     this.el.endingScreen.classList.add('show');
     this.el.endingScreen.innerHTML = `<div class="ending-text" id="ending-text-area"></div>
@@ -1488,12 +1504,12 @@ const Game = {
           const btnContainer = document.createElement('div');
           btnContainer.style.cssText = 'margin-top: 40px; text-align: center;';
           
-          // 大成功结局：添加"进行复盘"按钮
-          if (ending.type === 'success') {
+          // 好结局（good 和 success）：添加"进行复盘"按钮
+          if (ending.type === 'success' || ending.type === 'good') {
             const viewBtn = document.createElement('button');
             viewBtn.className = 'ending-restart';
             viewBtn.style.marginRight = '20px';
-            viewBtn.textContent = '进行复盘';
+            viewBtn.textContent = ending.type === 'success' ? '进行复盘' : '查看解锁内容';
             viewBtn.addEventListener('click', () => {
               this.el.endingScreen.classList.remove('show');
               this.switchView('logs');
@@ -1501,13 +1517,13 @@ const Game = {
             btnContainer.appendChild(viewBtn);
           }
           
-          // 坏结局：添加"回到第二阶段"按钮
-          if (ending.type === 'bad' || ending.type === 'timeout') {
-            const backBtn = document.createElement('button');
-            backBtn.className = 'ending-restart';
-            backBtn.style.marginRight = '20px';
-            backBtn.textContent = '回到第二阶段';
-            backBtn.addEventListener('click', () => {
+          // 好结局也可以回到第二阶段尝试更好的结局
+          if (ending.type === 'good') {
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'ending-restart';
+            retryBtn.style.marginRight = '20px';
+            retryBtn.textContent = '回到第二阶段';
+            retryBtn.addEventListener('click', () => {
               this.el.endingScreen.classList.remove('show');
               this.state.ending = null;
               this.state.reportSubmitted = false;
