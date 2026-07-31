@@ -49,8 +49,6 @@
 
 **方式一：直接下载 ZIP（推荐，无需安装 Git）**
 
-前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载最新版本的 ZIP 包，解压到任意目录。
-
 **方式二：Git 克隆**
 
 ```bash
@@ -59,7 +57,7 @@ git clone https://github.com/chemmy-11/helios.git
 
 ### 2. 获取 API Key
 
-前往 [platform.deepseek.com](https://platform.deepseek.com/) 注册账号（支持手机号/邮箱），在左侧菜单「API Keys」页面点击「创建 API Key」。DeepSeek 提供免费额度，足够日常游玩。
+前往 [platform.deepseek.com](https://platform.deepseek.com/) 注册账号（支持手机号/邮箱），在左侧菜单「API Keys」页面点击「创建 API Key」。
 
 ### 3. 启动游戏
 
