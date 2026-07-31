@@ -1244,9 +1244,10 @@ const Game = {
 
   // 解锁所有证据和时间线（用于复盘阶段）
   unlockAllEvidence() {
-    console.log('[DEBUG] unlockAllEvidence() 开始执行');
-    console.log('[DEBUG] evidenceBoard 元素:', this.el.evidenceBoard);
-    console.log('[DEBUG] subpanelTimeline 元素:', this.el.subpanelTimeline);
+    const debugInfo = [];
+    debugInfo.push('🔍 开始解锁所有证据...');
+    debugInfo.push('📋 evidenceBoard: ' + (this.el.evidenceBoard ? '✅ 存在' : '❌ null'));
+    debugInfo.push('📋 subpanelTimeline: ' + (this.el.subpanelTimeline ? '✅ 存在' : '❌ null'));
     
     // 1. 将所有线索标记为已发现
     GAME_DATA.clues.forEach(clue => {
@@ -1255,22 +1256,27 @@ const Game = {
         clue.discovered = true;
       }
     });
-    console.log('[DEBUG] 已解锁线索数:', this.state.discoveredClues.size);
+    debugInfo.push('🔓 已解锁线索数: ' + this.state.discoveredClues.size);
     
     // 2. 重新渲染证据板
-    console.log('[DEBUG] 调用 renderEvidenceBoard()');
+    debugInfo.push('🎨 渲染证据板...');
     this.renderEvidenceBoard();
     
     // 3. 重新渲染时间线
-    console.log('[DEBUG] 调用 renderTimeline()');
+    debugInfo.push('🎨 渲染时间线...');
     this.renderTimeline();
     
     // 4. 重新渲染日志查看器（解锁所有日志）
-    console.log('[DEBUG] 调用 renderLogViewer()');
+    debugInfo.push('🎨 渲染日志查看器...');
     this.renderLogViewer();
     
-    this.addSystemMessage('[复盘模式] 所有证据和时间线已解锁，供您回顾。');
-    console.log('[DEBUG] unlockAllEvidence() 执行完成');
+    debugInfo.push('✅ 解锁完成！');
+    
+    // 在页面上显示调试信息
+    this.addSystemMessage('[复盘模式] ' + debugInfo.join(' | '));
+    
+    // 同时输出到控制台
+    debugInfo.forEach(msg => console.log('[DEBUG] ' + msg));
   },
 
   // 重写：证据板渲染 + 证据-日志关联面板（P2）
