@@ -181,9 +181,36 @@ const Game = {
 
     // Report editor
     if (this.el.reportEditor) {
-      this.el.reportEditor.addEventListener('input', e => {
+      // Track IME composition state (critical for Chinese/Japanese/Korean input on mobile)
+      this.state.reportComposing = false;
+      
+      this.el.reportEditor.addEventListener('compositionstart', () => {
+        this.state.reportComposing = true;
+      });
+      
+      this.el.reportEditor.addEventListener('compositionend', (e) => {
+        this.state.reportComposing = false;
         this.state.reportDraft = e.target.value;
-        this.el.reportCount.textContent = e.target.value.length + ' 字';
+        if (this.el.reportCount) {
+          this.el.reportCount.textContent = e.target.value.length + ' 字';
+        }
+      });
+      
+      this.el.reportEditor.addEventListener('input', (e) => {
+        // Skip update during IME composition
+        if (this.state.reportComposing) return;
+        this.state.reportDraft = e.target.value;
+        if (this.el.reportCount) {
+          this.el.reportCount.textContent = e.target.value.length + ' 字';
+        }
+      });
+      
+      // Fallback: also listen to 'change' event (fires on blur/enter)
+      this.el.reportEditor.addEventListener('change', (e) => {
+        this.state.reportDraft = e.target.value;
+        if (this.el.reportCount) {
+          this.el.reportCount.textContent = e.target.value.length + ' 字';
+        }
       });
     }
 
@@ -1338,13 +1365,18 @@ const Game = {
   // ════════════════════════════════════
 
   submitReport() {
-    const text = this.state.reportDraft.trim();
+    // Always read from textarea directly as fallback (covers IME edge cases)
+    const text = (this.el.reportEditor?.value || this.state.reportDraft || '').trim();
     if (text.length < 10) {
       this.addSystemMessage('[错误] 报告内容过少。请至少撰写10个字符的结论。');
+      // 切换到对话终端视图，让用户看到错误消息
+      this.switchView('terminal');
       return;
     }
     
     this.state.reportSubmitted = true;
+    // 切换到对话终端视图，让用户看到提交反馈
+    this.switchView('terminal');
     this.addSystemMessage('[系统] 正在加密传输报告...');
     
     setTimeout(() => {
