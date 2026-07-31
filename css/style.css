@@ -167,6 +167,62 @@ body {
   flex-shrink: 0;
 }
 
+.api-key-box {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-deep);
+}
+
+.api-key-label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.api-key-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--data-cyan);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.api-key-input:focus {
+  border-color: var(--data-cyan);
+  box-shadow: 0 0 8px rgba(78, 205, 196, 0.3);
+}
+
+.api-key-input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.api-key-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.api-key-hint a {
+  color: var(--accent-amber);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.api-key-hint a:hover {
+  color: var(--data-cyan);
+  text-decoration: underline;
+}
+
 .countdown-box {
   padding: 16px;
   border-bottom: 1px solid var(--border);
@@ -741,6 +797,123 @@ body {
 .submit-btn:hover {
   background: rgba(232, 165, 64, 0.1);
   box-shadow: 0 0 12px rgba(232, 165, 64, 0.2);
+}
+
+/* === API KEY MODAL === */
+#api-key-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: modal-fade-in 0.3s ease;
+}
+
+#api-key-modal.hidden {
+  display: none;
+}
+
+.api-key-modal-content {
+  background: var(--bg-panel);
+  border: 2px solid var(--data-cyan);
+  border-radius: var(--radius);
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 0 40px rgba(78, 205, 196, 0.3);
+}
+
+.api-key-modal-content h2 {
+  color: var(--data-cyan);
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.api-key-modal-content p {
+  color: var(--text-main);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+#api-key-modal-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-family: var(--font-mono);
+  color: var(--data-cyan);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  outline: none;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+
+#api-key-modal-input:focus {
+  border-color: var(--data-cyan);
+  box-shadow: 0 0 12px rgba(78, 205, 196, 0.4);
+}
+
+#api-key-modal-input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.api-key-modal-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+}
+
+.api-key-modal-hint a {
+  color: var(--accent-amber);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.api-key-modal-hint a:hover {
+  color: var(--data-cyan);
+  text-decoration: underline;
+}
+
+#api-key-modal-submit {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  color: var(--bg-deep);
+  background: var(--data-cyan);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+
+#api-key-modal-submit:hover {
+  background: #5ee8df;
+  box-shadow: 0 0 16px rgba(78, 205, 196, 0.5);
+}
+
+.api-key-modal-skip {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.api-key-modal-skip:hover {
+  color: var(--accent-amber);
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* === PHASE TRANSITION === */

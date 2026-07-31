@@ -8,6 +8,7 @@ video/
 
 # Reasonix 配置
 .reasonix/
+reasonix.toml
 
 # 快捷方式
 *.lnk

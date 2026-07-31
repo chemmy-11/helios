@@ -41,63 +41,73 @@
 
 ### 环境要求
 
-- 任意一种本地 HTTP 服务器（Python / Node.js / VS Code 插件均可）
+- 一个现代浏览器（Chrome / Edge / Firefox）
 - [DeepSeek API Key](https://platform.deepseek.com/)（用于驱动 AI 对话）
 
-### 1. 克隆仓库
+### 1. 下载游戏
+
+前往 [Releases 页面](https://github.com/chemmy-11/helios/releases) 下载最新版本的 ZIP 包，解压到任意目录。
+
+或者，如果你已安装 [Git](https://git-scm.com/download/win)，可以直接克隆：
 
 ```bash
 git clone https://github.com/chemmy-11/helios.git
-cd helios
 ```
 
-### 2. 配置 API Key
+### 2. 获取 API Key
 
-打开 `js/data.js`，找到文件末尾的 `llm_config` 部分：
-
-```javascript
-llm_config: {
-  endpoint: "https://api.deepseek.com/v1/chat/completions",
-  model: "deepseek-chat",
-  api_key: "YOUR_DEEPSEEK_API_KEY_HERE",  // ← 替换为你的 Key
-  temperature: 0.7,
-  max_tokens: 200
-}
-```
-
-将 `YOUR_DEEPSEEK_API_KEY_HERE` 替换为你的 DeepSeek API Key。
-
-> **API Key 获取方式**：前往 [platform.deepseek.com](https://platform.deepseek.com/) 注册账号，在「API Keys」页面创建新 Key。DeepSeek 提供免费额度，足够日常游玩。
-
-> ⚠️ **安全提示**：请勿将你的 API Key 提交到公开仓库。本项目已在 `.gitignore` 中排除了相关配置。
+前往 [platform.deepseek.com](https://platform.deepseek.com/) 注册账号（支持手机号/邮箱），在左侧菜单「API Keys」页面点击「创建 API Key」。DeepSeek 提供免费额度，足够日常游玩。
 
 ### 3. 启动游戏
 
-本项目是纯前端应用，需要用 HTTP 服务器运行（直接打开 HTML 文件可能遇到跨域问题）。选择以下任一方式：
+**直接双击 `index.html` 即可打开游戏。**
 
-**方式一：Python（推荐，无需安装）**
+游戏启动后会弹出 API Key 配置窗口，将第 2 步获取的 Key 粘贴进去，点击确认即可开始游玩。
+
+Key 会自动保存到浏览器本地存储（localStorage），下次打开无需重新输入。
+
+> ⚠️ **安全提示**：API Key 仅保存在你的浏览器本地，不会上传到任何服务器。请勿将 Key 提交到公开仓库。
+
+### 4. 开始调查
+
+点击左侧的「可对话对象」，与三台机器人交流，收集线索，在 48 小时内提交你的责任认定报告。
+
+---
+
+### 遇到问题？
+
+**问题：双击 `index.html` 后，AI 对话功能不可用**
+
+这是由于浏览器安全策略（CORS）限制导致的。解决方法是使用本地 HTTP 服务器：
+
+**方案 A：VS Code + Live Server（推荐）**
+
+1. 用 [VS Code](https://code.visualstudio.com/) 打开项目文件夹
+2. 安装 [Live Server](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) 扩展
+3. 右键 `index.html` → **Open with Live Server**
+4. 浏览器会自动打开游戏页面
+
+**方案 B：Python（无需额外安装软件）**
+
+如果你已安装 [Python](https://www.python.org/downloads/windows/)：
 
 ```bash
-# Python 3
+cd helios
 python -m http.server 8080
-
-# Python 2
-python -m SimpleHTTPServer 8080
 ```
 
-**方式二：Node.js**
+然后浏览器访问 `http://localhost:8080`
+
+**方案 C：Node.js**
+
+如果你已安装 [Node.js](https://nodejs.org/)：
 
 ```bash
+cd helios
 npx serve .
 ```
 
-**方式三：VS Code**
-
-安装 [Live Server](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer) 扩展，右键 `index.html` → **Open with Live Server**
-
-### 4. 开始游玩
-
-打开浏览器访问 `http://localhost:8080`，点击左侧的可对话对象开始你的调查。
+然后浏览器访问显示的地址
 
 ---
 

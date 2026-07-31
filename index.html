@@ -43,6 +43,21 @@
 
   <!-- 侧边栏 -->
   <aside id="sidebar">
+    <!-- API Key 配置 -->
+    <div class="api-key-box">
+      <label class="api-key-label" for="api-key-input">DeepSeek API Key</label>
+      <input 
+        type="password" 
+        class="api-key-input" 
+        id="api-key-input" 
+        placeholder="sk-..." 
+        autocomplete="off"
+      >
+      <div class="api-key-hint">
+        <a href="https://platform.deepseek.com/api_keys" target="_blank">获取 Key</a>
+      </div>
+    </div>
+
     <!-- 倒计时 -->
     <div class="countdown-box">
       <div class="countdown-label">TIME REMAINING</div>
@@ -147,6 +162,25 @@
 
 <!-- 阶段过渡覆盖层 -->
 <div id="phase-transition"></div>
+
+<!-- API Key 配置弹窗 -->
+<div id="api-key-modal">
+  <div class="api-key-modal-content">
+    <h2>⚙️ DeepSeek API Key 配置</h2>
+    <p>本游戏需要 DeepSeek API 驱动 AI 对话，请输入你的 API Key：</p>
+    <input 
+      type="password" 
+      id="api-key-modal-input" 
+      placeholder="sk-..." 
+      autocomplete="off"
+    >
+    <div class="api-key-modal-hint">
+      还没有 Key？<a href="https://platform.deepseek.com/api_keys" target="_blank">点击获取</a>（DeepSeek 提供免费额度）
+    </div>
+    <button id="api-key-modal-submit">确认并开始游戏</button>
+    <div class="api-key-modal-skip" id="api-key-modal-skip">稍后配置（AI 对话功能将不可用）</div>
+  </div>
+</div>
 
 <!-- 过场动画覆盖层 -->
 <div id="cutscene-overlay"></div>

@@ -52,7 +52,53 @@ const Game = {
     this.startGameLoop();
     this.showPhaseTransition(1);
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
+    this.checkApiKey();
     console.log('[HELIOS] Game initialized.');
+  },
+
+  checkApiKey() {
+    const savedKey = localStorage.getItem('deepseek_api_key');
+    if (!savedKey) {
+      // Show modal if no API Key saved
+      if (this.el.apiKeyModal) {
+        this.el.apiKeyModal.classList.remove('hidden');
+        // Auto-focus input
+        setTimeout(() => {
+          if (this.el.apiKeyModalInput) {
+            this.el.apiKeyModalInput.focus();
+          }
+        }, 100);
+      }
+    } else {
+      // Hide modal and sync sidebar input
+      if (this.el.apiKeyModal) {
+        this.el.apiKeyModal.classList.add('hidden');
+      }
+      if (this.el.apiKeyInput) {
+        this.el.apiKeyInput.value = savedKey;
+      }
+    }
+  },
+
+  handleApiKeySubmit() {
+    const key = this.el.apiKeyModalInput.value.trim();
+    if (key && key !== 'sk-...') {
+      localStorage.setItem('deepseek_api_key', key);
+      if (this.el.apiKeyInput) {
+        this.el.apiKeyInput.value = key;
+      }
+      if (this.el.apiKeyModal) {
+        this.el.apiKeyModal.classList.add('hidden');
+      }
+    } else {
+      alert('请输入有效的 API Key');
+    }
+  },
+
+  handleApiKeySkip() {
+    if (this.el.apiKeyModal) {
+      this.el.apiKeyModal.classList.add('hidden');
+    }
   },
 
   cacheElements() {
@@ -79,9 +125,31 @@ const Game = {
     this.el.endingScreen = document.getElementById('ending-screen');
     this.el.cutsceneOverlay = document.getElementById('cutscene-overlay');
     this.el.phaseTransition = document.getElementById('phase-transition');
+    this.el.apiKeyInput = document.getElementById('api-key-input');
+    this.el.apiKeyModal = document.getElementById('api-key-modal');
+    this.el.apiKeyModalInput = document.getElementById('api-key-modal-input');
+    this.el.apiKeyModalSubmit = document.getElementById('api-key-modal-submit');
+    this.el.apiKeyModalSkip = document.getElementById('api-key-modal-skip');
   },
 
   bindEvents() {
+    // API Key input - save to localStorage
+    if (this.el.apiKeyInput) {
+      const savedKey = localStorage.getItem('deepseek_api_key');
+      if (savedKey) {
+        this.el.apiKeyInput.value = savedKey;
+      }
+      
+      this.el.apiKeyInput.addEventListener('change', (e) => {
+        const key = e.target.value.trim();
+        if (key && key !== 'sk-...') {
+          localStorage.setItem('deepseek_api_key', key);
+        } else {
+          localStorage.removeItem('deepseek_api_key');
+        }
+      });
+    }
+
     // Tab switching
     this.el.tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -121,6 +189,22 @@ const Game = {
     document.getElementById('cutscene-skip')?.addEventListener('click', () => {
       this.el.cutsceneOverlay.classList.remove('show');
     });
+
+    // API Key modal
+    if (this.el.apiKeyModalSubmit) {
+      this.el.apiKeyModalSubmit.addEventListener('click', () => this.handleApiKeySubmit());
+    }
+    if (this.el.apiKeyModalSkip) {
+      this.el.apiKeyModalSkip.addEventListener('click', () => this.handleApiKeySkip());
+    }
+    if (this.el.apiKeyModalInput) {
+      this.el.apiKeyModalInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.handleApiKeySubmit();
+        }
+      });
+    }
 
   },
 
@@ -830,7 +914,11 @@ const Game = {
 
   async callLLM(systemPrompt, npcId, userMessage) {
     const cfg = GAME_DATA.llm_config;
-    if (!cfg || !cfg.api_key) throw new Error('No LLM config');
+    // 优先从 localStorage 读取 API Key，其次使用 data.js 中的配置
+    const apiKey = localStorage.getItem('deepseek_api_key') || cfg.api_key;
+    if (!apiKey || apiKey === 'YOUR_DEEPSEEK_API_KEY_HERE') {
+      throw new Error('No API Key configured');
+    }
 
     // Build conversation history for context
     const history = this.state.conversations[npcId] || [];
