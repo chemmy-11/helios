@@ -51,7 +51,17 @@ const Game = {
     this.renderTimeline();
     this.renderLocationView();
     this.startGameLoop();
-    this.showPhaseTransition(1);
+    
+    // 🔧 调试模式：直接跳到报告提交阶段
+    this.state.phase = 3;
+    this.state.gameTime = 40; // 设置到40小时（阶段3时间范围）
+    this.unlockView('evidence');
+    this.unlockView('report');
+    this.renderLogViewer(); // 重新渲染以解锁所有日志
+    this.switchView('report'); // 直接显示报告视图
+    this.addSystemMessage('[调试模式] 已直接进入报告提交阶段。');
+    
+    this.showPhaseTransition(3);
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
     this.checkApiKey();
     console.log('[HELIOS] Game initialized.');
@@ -1232,6 +1242,28 @@ const Game = {
     });
   },
 
+  // 解锁所有证据和时间线（用于复盘阶段）
+  unlockAllEvidence() {
+    // 1. 将所有线索标记为已发现
+    GAME_DATA.clues.forEach(clue => {
+      if (!this.state.discoveredClues.has(clue.id)) {
+        this.state.discoveredClues.add(clue.id);
+        clue.discovered = true;
+      }
+    });
+    
+    // 2. 重新渲染证据板
+    this.renderEvidenceBoard();
+    
+    // 3. 重新渲染时间线
+    this.renderTimeline();
+    
+    // 4. 重新渲染日志查看器（解锁所有日志）
+    this.renderLogViewer();
+    
+    this.addSystemMessage('[复盘模式] 所有证据和时间线已解锁，供您回顾。');
+  },
+
   // 重写：证据板渲染 + 证据-日志关联面板（P2）
   renderEvidenceBoard() {
     const board = this.el.evidenceBoard;
@@ -1512,7 +1544,10 @@ const Game = {
             viewBtn.textContent = ending.type === 'success' ? '进行复盘' : '查看解锁内容';
             viewBtn.addEventListener('click', () => {
               this.el.endingScreen.classList.remove('show');
-              this.switchView('logs');
+              // 解锁所有时间线和证据面板数据
+              this.unlockAllEvidence();
+              this.switchView('evidence'); // 先显示证据板，用户可手动切换到数据终端查看时间线
+              this.addSystemMessage('提示：您可以点击顶部的"数据终端"标签查看完整时间线。');
             });
             btnContainer.appendChild(viewBtn);
           }
@@ -1536,7 +1571,7 @@ const Game = {
               this.switchView('terminal');
               this.addSystemMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
             });
-            btnContainer.appendChild(backBtn);
+            btnContainer.appendChild(retryBtn);
           }
           
           const restartBtn = document.createElement('button');
@@ -1816,14 +1851,15 @@ const Game = {
     `;
     this.el.cutsceneOverlay.classList.add('show');
     
+    // 允许用户点击跳过
     this.el.cutsceneOverlay.querySelector('.cutscene-skip')?.addEventListener('click', () => {
       this.el.cutsceneOverlay.classList.remove('show');
     });
     
-    // Auto-hide after 3 seconds (placeholder)
+    // 自动隐藏（5秒后）- 不需要用户点击
     setTimeout(() => {
       this.el.cutsceneOverlay.classList.remove('show');
-    }, 3000);
+    }, 5000);
   },
 
   // ════════════════════════════════════
