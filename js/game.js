@@ -947,7 +947,17 @@ const Game = {
     const ctx = this.state.sharedAgentContext || GAME_DATA.shared_agent_context;
     if (!ctx) return basePrompt;
 
-    let sharedText = '\n\n## 共享情报（运行时注入）\n\n';
+    // 注入当前阶段信息
+    const phaseNames = {
+      1: '第一阶段（调查阶段）',
+      2: '第二阶段（交叉验证阶段）',
+      3: '第三阶段（最终裁决阶段）'
+    };
+    const currentPhaseName = phaseNames[this.state.phase] || '未知阶段';
+    
+    let sharedText = `\n\n## 当前游戏阶段\n\n当前处于${currentPhaseName}。请严格遵守你的【阶段限制规则】。\n`;
+
+    sharedText += '\n## 共享情报（运行时注入）\n\n';
     sharedText += '以下是截止目前，其他机器人与调查员的对话摘要。你可以自然地在对话中引用这些信息，就像你和另外两台机器人实时交流过一样。\n\n';
 
     const otherInquiries = ctx.player_inquiries.filter(i => i.npc !== npcId);
@@ -1188,6 +1198,19 @@ const Game = {
     GAME_DATA.keyword_clue_map.forEach(entry => {
       const matched = entry.keywords.some(kw => lowerText.includes(kw.toLowerCase()));
       if (matched && entry.clue) {
+        // Check phase requirement
+        if (entry.phase && this.state.phase < entry.phase) {
+          return;
+        }
+        // Check prerequisites
+        if (entry.prerequisites && entry.minPrerequisites) {
+          const discoveredCount = entry.prerequisites.filter(clueId => 
+            this.state.discoveredClues.has(clueId)
+          ).length;
+          if (discoveredCount < entry.minPrerequisites) {
+            return;
+          }
+        }
         this.discoverClue(entry.clue);
       }
     });
