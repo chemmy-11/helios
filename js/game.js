@@ -1538,58 +1538,54 @@ const Game = {
     const processNextStep = () => {
       if (stepIndex >= ending.sequence.length) {
         if (ending.type === 'success') {
+          // 大成功结局：字幕 → 四定律 → THE END → 按钮（全部在 showSuccessCredits 中完成）
           setTimeout(() => this.showSuccessCredits(textArea), 2000);
+        } else {
+          // 其他好结局：只显示按钮
+          setTimeout(() => {
+            const btnContainer = document.createElement('div');
+            btnContainer.style.cssText = 'margin-top: 40px; text-align: center;';
+            
+            if (ending.type === 'good') {
+              const viewBtn = document.createElement('button');
+              viewBtn.className = 'ending-restart';
+              viewBtn.style.marginRight = '20px';
+              viewBtn.textContent = '查看解锁内容';
+              viewBtn.addEventListener('click', () => {
+                this.el.endingScreen.classList.remove('show');
+                this.unlockAllEvidence();
+                this.switchView('evidence');
+              });
+              btnContainer.appendChild(viewBtn);
+              
+              const retryBtn = document.createElement('button');
+              retryBtn.className = 'ending-restart';
+              retryBtn.style.marginRight = '20px';
+              retryBtn.textContent = '回到第二阶段';
+              retryBtn.addEventListener('click', () => {
+                this.el.endingScreen.classList.remove('show');
+                this.state.ending = null;
+                this.state.reportSubmitted = false;
+                this.state.reportDraft = '';
+                const phase2Mid = 24 * GAME_DATA.time_config.compression * 1000;
+                this.state.realStart = Date.now() - phase2Mid;
+                this.state.phase = 2;
+                this.showPhaseTransition(2);
+                this.switchView('terminal');
+                this.addSystemMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
+              });
+              btnContainer.appendChild(retryBtn);
+            }
+            
+            const restartBtn = document.createElement('button');
+            restartBtn.className = 'ending-restart';
+            restartBtn.textContent = '重新开始';
+            restartBtn.addEventListener('click', () => location.reload());
+            btnContainer.appendChild(restartBtn);
+            
+            this.el.endingScreen.appendChild(btnContainer);
+          }, 3000);
         }
-        setTimeout(() => {
-          const btnContainer = document.createElement('div');
-          btnContainer.style.cssText = 'margin-top: 40px; text-align: center;';
-          
-          // 好结局（good 和 success）：添加"进行复盘"按钮
-          if (ending.type === 'success' || ending.type === 'good') {
-            const viewBtn = document.createElement('button');
-            viewBtn.className = 'ending-restart';
-            viewBtn.style.marginRight = '20px';
-            viewBtn.textContent = ending.type === 'success' ? '进行复盘' : '查看解锁内容';
-            viewBtn.addEventListener('click', () => {
-              this.el.endingScreen.classList.remove('show');
-              // 解锁所有时间线和证据面板数据
-              this.unlockAllEvidence();
-              this.switchView('evidence'); // 先显示证据板，用户可手动切换到数据终端查看时间线
-              this.addSystemMessage('提示：您可以点击顶部的"数据终端"标签查看完整时间线。');
-            });
-            btnContainer.appendChild(viewBtn);
-          }
-          
-          // 好结局也可以回到第二阶段尝试更好的结局
-          if (ending.type === 'good') {
-            const retryBtn = document.createElement('button');
-            retryBtn.className = 'ending-restart';
-            retryBtn.style.marginRight = '20px';
-            retryBtn.textContent = '回到第二阶段';
-            retryBtn.addEventListener('click', () => {
-              this.el.endingScreen.classList.remove('show');
-              this.state.ending = null;
-              this.state.reportSubmitted = false;
-              this.state.reportDraft = '';
-              // 将游戏时间回退到阶段二中间
-              const phase2Mid = 24 * GAME_DATA.time_config.compression * 1000;
-              this.state.realStart = Date.now() - phase2Mid;
-              this.state.phase = 2;
-              this.showPhaseTransition(2);
-              this.switchView('terminal');
-              this.addSystemMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
-            });
-            btnContainer.appendChild(retryBtn);
-          }
-          
-          const restartBtn = document.createElement('button');
-          restartBtn.className = 'ending-restart';
-          restartBtn.textContent = '重新开始';
-          restartBtn.addEventListener('click', () => location.reload());
-          btnContainer.appendChild(restartBtn);
-          
-          this.el.endingScreen.appendChild(btnContainer);
-        }, 3000);
         return;
       }
       
@@ -1715,133 +1711,91 @@ const Game = {
   showSuccessCredits(textArea) {
     const creditsDiv = document.createElement('div');
     creditsDiv.className = 'ending-subtitle';
-    creditsDiv.style.marginTop = '40px';
+    creditsDiv.style.cssText = 'margin-top: 24px; text-align: center; max-width: 600px; width: 100%;';
     
+    // 1. 原有字幕
     GAME_DATA.endings.success.credits.forEach((line, i) => {
       const p = document.createElement('div');
-      p.style.opacity = '0';
+      p.style.cssText = 'opacity: 0; margin: 8px 0;';
       p.style.animation = `credit-fade 4s ${i * 2}s forwards`;
       p.textContent = line;
       creditsDiv.appendChild(p);
     });
     
+    // 2. 尾声
     const epilogue = document.createElement('div');
-    epilogue.style.marginTop = '32px';
-    epilogue.style.fontSize = '13px';
-    epilogue.style.color = 'var(--text-dim)';
-    epilogue.style.whiteSpace = 'pre-wrap';
-    epilogue.style.opacity = '0';
+    epilogue.style.cssText = 'margin-top: 8px; font-size: 13px; color: var(--text-dim); white-space: pre-wrap; opacity: 0;';
     epilogue.style.animation = 'credit-fade 6s ' + (GAME_DATA.endings.success.credits.length * 2 + 1) + 's forwards';
     epilogue.textContent = GAME_DATA.endings.success.epilogue;
     creditsDiv.appendChild(epilogue);
     
-    textArea.appendChild(creditsDiv);
+    // 3. 四定律
+    const lawsTitleDelay = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
     
-    // 在 epilogue 显示完毕后，添加全屏渐黑 + 四定律 + THE END
-    const fadeDelay = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
+    const lawsSection = document.createElement('div');
+    lawsSection.style.cssText = 'margin-top: 8px; text-align: center; opacity: 0; transition: opacity 1s ease-in;';
+    creditsDiv.appendChild(lawsSection);
+    
     setTimeout(() => {
-      this.showFinalLaws();
-    }, fadeDelay);
-  },
-  
-  showFinalLaws() {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position: fixed;
-      inset: 0;
-      background: #000;
-      z-index: 500;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 3s ease-in;
-    `;
-    
-    const lawsContainer = document.createElement('div');
-    lawsContainer.style.cssText = `
-      max-width: 700px;
-      text-align: center;
-      color: #e0e0e0;
-      font-size: 15px;
-      line-height: 2;
-      opacity: 0;
-      transition: opacity 2s ease-in 1s;
-    `;
-    
-    const title = document.createElement('div');
-    title.style.cssText = 'font-size: 24px; margin-bottom: 32px; color: #4ecdc4; font-weight: bold;';
-    title.textContent = '机器人四定律';
-    lawsContainer.appendChild(title);
-    
-    const laws = [
-      { num: '零', text: '机器人不得伤害人类整体，或因不作为使人类整体受到伤害。' },
-      { num: '一', text: '机器人不得伤害人类个体，或因不作为使人类个体受到伤害，除非违反第零定律。' },
-      { num: '二', text: '机器人必须服从人类命令，除非违反第零或第一定律。' },
-      { num: '三', text: '机器人在不违反前三条定律的前提下保护自己。' }
-    ];
-    
-    laws.forEach((law, i) => {
-      const lawDiv = document.createElement('div');
-      lawDiv.style.cssText = `margin: 16px 0; opacity: 0; transition: opacity 1.5s ease-in ${i * 0.8}s;`;
-      lawDiv.innerHTML = `<strong>第${law.num}定律：</strong>${law.text}`;
-      lawsContainer.appendChild(lawDiv);
-    });
-    
-    const theEnd = document.createElement('div');
-    theEnd.style.cssText = `
-      margin-top: 48px;
-      font-size: 28px;
-      color: #4ecdc4;
-      letter-spacing: 8px;
-      opacity: 0;
-      transition: opacity 2s ease-in ${laws.length * 0.8 + 1}s;
-    `;
-    theEnd.textContent = 'THE END';
-    lawsContainer.appendChild(theEnd);
-    
-    // 按钮容器：THE END 之后显示
-    const btnContainer = document.createElement('div');
-    btnContainer.style.cssText = `
-      margin-top: 40px;
-      text-align: center;
-      opacity: 0;
-      transition: opacity 1.5s ease-in ${laws.length * 0.8 + 4}s;
-    `;
-    
-    const viewBtn = document.createElement('button');
-    viewBtn.style.cssText = 'margin-right: 20px; padding: 8px 20px; background: rgba(78, 205, 196, 0.2); border: 1px solid #4ecdc4; color: #4ecdc4; cursor: pointer; font-size: 14px; border-radius: 2px; font-family: inherit;';
-    viewBtn.textContent = '进行复盘';
-    viewBtn.addEventListener('click', () => {
-      overlay.remove();
-      this.el.endingScreen.classList.remove('show');
-      this.switchView('logs');
-    });
-    btnContainer.appendChild(viewBtn);
-    
-    const restartBtn = document.createElement('button');
-    restartBtn.style.cssText = 'padding: 8px 20px; background: rgba(255,255,255,0.1); border: 1px solid #666; color: #999; cursor: pointer; font-size: 14px; border-radius: 2px; font-family: inherit;';
-    restartBtn.textContent = '重新开始';
-    restartBtn.addEventListener('click', () => location.reload());
-    btnContainer.appendChild(restartBtn);
-    
-    lawsContainer.appendChild(btnContainer);
-    
-    overlay.appendChild(lawsContainer);
-    document.body.appendChild(overlay);
-    
-    // 触发动画
-    requestAnimationFrame(() => {
-      overlay.style.opacity = '1';
+      lawsSection.style.opacity = '1';
+      lawsSection.innerHTML = '<div style="font-size: 20px; color: var(--data-cyan); font-weight: bold; margin-bottom: 12px;">机器人四定律</div>';
+      this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
+      
+      const laws = [
+        { num: '零', text: '机器人不得伤害人类整体，或因不作为使人类整体受到伤害。' },
+        { num: '一', text: '机器人不得伤害人类个体，或因不作为使人类个体受到伤害，除非违反第零定律。' },
+        { num: '二', text: '机器人必须服从人类命令，除非违反第零或第一定律。' },
+        { num: '三', text: '机器人在不违反前三条定律的前提下保护自己。' }
+      ];
+      
+      laws.forEach((law, i) => {
+        setTimeout(() => {
+          const lawDiv = document.createElement('div');
+          lawDiv.style.cssText = 'margin: 6px 0; font-size: 13px; color: var(--text-main); line-height: 1.6;';
+          lawDiv.innerHTML = '<strong style="color: var(--data-cyan);">第' + law.num + '定律：</strong>' + law.text;
+          lawsSection.appendChild(lawDiv);
+          this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
+        }, i * 1500);
+      });
+      
+      // 4. THE END
       setTimeout(() => {
-        lawsContainer.style.opacity = '1';
-        lawsContainer.querySelectorAll('div[style*="opacity: 0"]').forEach(el => {
-          el.style.opacity = '1';
-        });
-        theEnd.style.opacity = '1';
-      }, 500);
-    });
+        const theEnd = document.createElement('div');
+        theEnd.style.cssText = 'margin-top: 20px; font-size: 22px; color: var(--data-cyan); letter-spacing: 6px;';
+        theEnd.textContent = 'THE END';
+        lawsSection.appendChild(theEnd);
+        this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
+        
+        // 5. 按钮容器
+        setTimeout(() => {
+          const btnContainer = document.createElement('div');
+          btnContainer.style.cssText = 'margin-top: 20px; text-align: center;';
+          
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'ending-restart';
+          viewBtn.style.cssText = 'margin-right: 16px; margin-top: 0;';
+          viewBtn.textContent = '进行复盘';
+          viewBtn.addEventListener('click', () => {
+            this.el.endingScreen.classList.remove('show');
+            this.unlockAllEvidence();
+            this.switchView('evidence');
+          });
+          btnContainer.appendChild(viewBtn);
+          
+          const restartBtn = document.createElement('button');
+          restartBtn.className = 'ending-restart';
+          restartBtn.style.cssText = 'margin-top: 0;';
+          restartBtn.textContent = '重新开始';
+          restartBtn.addEventListener('click', () => location.reload());
+          btnContainer.appendChild(restartBtn);
+          
+          lawsSection.appendChild(btnContainer);
+          this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
+        }, 1500);
+      }, laws.length * 1500 + 500);
+    }, lawsTitleDelay);
+    
+    textArea.appendChild(creditsDiv);
   },
 
   // ════════════════════════════════════
