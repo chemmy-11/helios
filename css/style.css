@@ -158,6 +158,9 @@ body {
 #main-layout {
   display: flex;
   height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
+  /* 键盘弹出时由 JS 设置 --kb-height 撑开底部，输入框随内容区上移 */
+  padding-bottom: var(--kb-height, 0px);
+  transition: padding-bottom 0.15s ease-out;
 }
 
 /* === SIDEBAR === */

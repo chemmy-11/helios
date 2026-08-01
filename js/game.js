@@ -57,9 +57,54 @@ const Game = {
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
     this.setupExitGuard();
     this.setupStatusBar();
+    this.setupKeyboard();
     // 启动 4 秒后静默检查更新（仅原生 App）
     setTimeout(() => this.checkForUpdates(false), 4000);
     console.log('[HELIOS] Game initialized.');
+  },
+
+  // 键盘弹出：底部导航移入输入框上方（紧贴输入框），键盘收起后移回屏幕底部
+  moveBottomNavIntoInput() {
+    const nav = this.el.bottomNav;
+    if (!nav || nav.dataset.moved) return;
+    const inputArea = document.querySelector('#v-terminal .input-area');
+    if (!inputArea) return;
+    inputArea.parentElement.insertBefore(nav, inputArea);
+    nav.dataset.moved = '1';
+  },
+
+  restoreBottomNav() {
+    const nav = this.el.bottomNav;
+    if (!nav || !nav.dataset.moved) return;
+    document.body.appendChild(nav);
+    delete nav.dataset.moved;
+  },
+
+  // 键盘适配：与 keyboard-open（底部导航移入输入框上方）协调工作。
+  // 检测系统是否已 resize（innerHeight 缩小 = 视口已收缩到键盘上沿）：
+  // - resize 已生效 → 不重复撑开（避免双重偏移）
+  // - resize 未生效（edge-to-edge/系统栏自动隐藏）→ 手动撑开键盘高度，输入框被顶起
+  setupKeyboard() {
+    const Keyboard = window.Capacitor?.Plugins?.Keyboard;
+    if (!Keyboard) return;
+    this._kbBaselineH = window.innerHeight;
+    this._kbHeight = 0;
+
+    const applyKb = () => {
+      const shrink = Math.max(0, this._kbBaselineH - window.innerHeight);
+      const pad = Math.max(0, (this._kbHeight || 0) - shrink);
+      document.documentElement.style.setProperty('--kb-height', pad + 'px');
+    };
+
+    Keyboard.addListener('keyboardWillShow', info => {
+      this._kbHeight = info?.keyboardHeight || 0;
+      setTimeout(applyKb, 50); // 等一帧让 innerHeight 更新
+    }).catch(() => {});
+    Keyboard.addListener('keyboardDidHide', () => {
+      this._kbHeight = 0;
+      this._kbBaselineH = window.innerHeight;
+      document.documentElement.style.setProperty('--kb-height', '0px');
+    }).catch(() => {});
   },
 
   // 状态栏动态校正：根据系统是否让位决定 CSS 占位
@@ -291,12 +336,19 @@ const Game = {
         this.handlePlayerInput();
       }
     });
-    // 键盘弹出/收起：隐藏底部导航，让输入区贴键盘（聊天 App 标准行为）
+    // 键盘弹出/收起：底部导航移入输入框上方（微信式），输入区贴键盘
     this.el.playerInput.addEventListener('focus', () => {
+      clearTimeout(this._navRestoreTimer);
       document.body.classList.add('keyboard-open');
+      this.moveBottomNavIntoInput();
     });
     this.el.playerInput.addEventListener('blur', () => {
       document.body.classList.remove('keyboard-open');
+      // 延迟移回：点击导航横条时 touchstart/mousedown 先触发 blur，
+      // 而 click 在 touchEnd 后约 300ms 才合成——延迟 500ms 覆盖合成窗口，
+      // 避免按钮在 click 前"跑掉"导致点击丢失
+      clearTimeout(this._navRestoreTimer);
+      this._navRestoreTimer = setTimeout(() => this.restoreBottomNav(), 500);
     });
 
     // Report editor

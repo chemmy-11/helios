@@ -97,12 +97,13 @@
     height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h) - var(--status-bar-h, 0px));
   }
 
-  /* 键盘弹出：隐藏底部导航，输入区直接贴键盘 */
-  body.keyboard-open #main-layout {
-    height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
-  }
+  /* 键盘弹出：底部导航移入输入框上方，显示为横条（微信式） */
   body.keyboard-open .mobile-bottom-nav {
-    display: none !important;
+    position: static;
+    display: flex !important;
+    height: var(--bottom-nav-h);
+    border-top: none;
+    border-bottom: 1px solid var(--border);
   }
 
   /* === SIDEBAR → DRAWER === */

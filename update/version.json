@@ -1,6 +1,6 @@
 {
-  "version": "1.6.0",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.0/update.zip",
+  "version": "1.6.1",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.1/update.zip",
   "required": false,
-  "changelog": "我AI 大成功结局上线\n读懂 S-3，触发隐藏结局\n指控陈远专属结局\n人格深化（陈远重写+机器人prompt优化）\n在线更新机制上线"
+  "changelog": "键盘弹出适配：输入框正常被顶起\n底部导航键盘弹出时上移为输入框上方横条（微信式）\n修复点击横条切换视图时按钮跑位\n优化输入体验与布局细节"
 }
