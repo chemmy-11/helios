@@ -865,7 +865,7 @@ const Game = {
 
   handlePlayerInput() {
     const input = this.el.playerInput;
-    const text = input.innerText.trim();
+    const text = input.value.trim();
     if (!text) return;
     
     const npcId = this.state.currentNPC;
@@ -874,7 +874,7 @@ const Game = {
       return;
     }
     
-    input.innerHTML = '';
+    input.value = '';
     input.scrollTop = 0;
     
     // Show player message

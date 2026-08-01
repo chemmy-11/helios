@@ -507,13 +507,12 @@ body {
   font-family: var(--font-mono);
   font-size: 14px;
   outline: none;
+  resize: none;
   overflow-y: auto;
-  min-height: 36px;
-  max-height: 120px;
+  height: 52px;  /* 固定高度：避免动态伸缩触发 WebView IME 重置（真机输入稳定性优先） */
   line-height: 1.6;
-  padding: 4px 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
 
 .send-btn {
