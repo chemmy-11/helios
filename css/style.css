@@ -70,12 +70,14 @@ body {
 
 /* === TOP BAR === */
 #top-bar {
-  height: var(--topbar-h);
+  height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: 16px;
+  padding-right: 16px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 16px;
   gap: 24px;
   z-index: 100;
 }
@@ -154,7 +156,7 @@ body {
 /* === MAIN LAYOUT === */
 #main-layout {
   display: flex;
-  height: calc(100vh - var(--topbar-h));
+  height: calc(100vh - var(--topbar-h) - env(safe-area-inset-top, 0px));
 }
 
 /* === SIDEBAR === */
