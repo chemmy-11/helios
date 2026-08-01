@@ -1,6 +1,6 @@
 {
-  "version": "1.6.1",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.1/update.zip",
+  "version": "1.6.2",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.2/update.zip",
   "required": false,
-  "changelog": "键盘弹出适配：输入框正常被顶起\n底部导航键盘弹出时上移为输入框上方横条（微信式）\n修复点击横条切换视图时按钮跑位\n优化输入体验与布局细节"
+  "changelog": "修复在线更新下载失败（Download called without version）\n更新应用方式优化：下载后不打断当前会话，下次启动生效\n键盘弹出适配与微信式导航横条"
 }

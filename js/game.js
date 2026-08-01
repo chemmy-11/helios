@@ -157,8 +157,11 @@ const Game = {
     if (!Updater) return;
     try {
       this.addDirectMessage('正在下载更新包...');
-      const bundle = await Updater.download({ url: manifest.url });
-      await Updater.set({ id: bundle.id });
+      // capgo 6.x：download 必须显式传 version，否则报 "Download called without version"
+      const bundle = await Updater.download({ url: manifest.url, version: manifest.version });
+      // 用 next 而非 set：set 会立即销毁 JS 上下文（后续代码不执行），
+      // next 在应用下次启动/进入后台时激活，不打断当前会话
+      await Updater.next({ id: bundle.id });
       this.showPhasePrompt('updateDone');
     } catch (e) {
       console.error('[HELIOS] 更新下载失败:', e);
