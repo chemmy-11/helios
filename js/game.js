@@ -10,11 +10,9 @@
 const Game = {
   state: {
     phase: 1,
-    gameTime: 0,          // in game hours
-    realStart: null,
     currentLocation: 'corridor',
     currentNPC: null,
-    conversations: {},     // { npcId: [{role, text, time}] }
+    conversations: {},     // { npcId: [{role, text}] }
     visitedNodes: new Set(),
     askedQuestions: new Set(),
     discoveredClues: new Set(),
@@ -27,9 +25,14 @@ const Game = {
     selectedSacrifice: null,
     llmAvailable: false,
     typingActive: false,
-    robotCycleState: null,  // 机器人行为循环运行时状态（P1）
+    composingInput: false,      // 输入框 IME 组合中
     sharedAgentContext: null, // Agent 共享记忆（P2）
     noSingleBlameInsight: false, // 玩家是否意识到"没有谁负主要责任"
+    canAdvanceToPhase3: false,  // 指控已回应 / 选择不指控 → true，可休息推进
+    accusedNPCs: new Set(),     // 已正式指控的 NPC 集合
+    accusationUnlocked: false,  // 线索 ≥ 10 条 → true，解锁指控
+    noAccusationUnlocked: false, // 线索 ≥ 20 条 → true，解锁不指控
+    _p1RestNotified: false,     // Phase 1 休息提醒已弹窗过
   },
 
   el: {},  // DOM element cache
@@ -42,7 +45,6 @@ const Game = {
     this.cacheElements();
     this.bindEvents();
     this.initConversations();
-    this.initRobotCycles();
     this.renderLocations();
     this.renderNPCList();
     this.renderTerminalHeader(null);
@@ -50,11 +52,47 @@ const Game = {
     this.renderLogViewer();
     this.renderTimeline();
     this.renderLocationView();
-    this.startGameLoop();
+    this.updatePhaseDisplay();
     this.showPhaseTransition(1);
-    this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
-    this.checkApiKey();
+    this.initInputMirror();
+    this.adaptTextarea(); // 初始校准输入框高度
+    this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
+    this.setupExitGuard();
     console.log('[HELIOS] Game initialized.');
+  },
+
+  // 游戏是否已有实质进度（用于退出提醒）
+  hasProgress() {
+    if (this.state.discoveredClues.size > 0) return true;
+    for (const id in this.state.conversations) {
+      if (this.state.conversations[id].length > 0) return true;
+    }
+    return false;
+  },
+
+  // 退出提醒：Android 返回键（Capacitor）+ 浏览器关闭/刷新（beforeunload）双通道
+  setupExitGuard() {
+    const AppPlugin = window.Capacitor?.Plugins?.App;
+    if (AppPlugin) {
+      AppPlugin.addListener('backButton', () => {
+        // 存档面板打开时，返回键优先关闭面板
+        if (this.el.savePanelOverlay && this.el.savePanelOverlay.classList.contains('show')) {
+          this.hideSavePanel();
+          return;
+        }
+        if (this.hasProgress() && !this.state.ending) {
+          this.showPhasePrompt('exitConfirm');
+        } else {
+          AppPlugin.exitApp();
+        }
+      }).catch(e => console.error('[HELIOS] backButton 监听失败:', e));
+    }
+    window.addEventListener('beforeunload', (e) => {
+      if (this.hasProgress() && !this.state.ending) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
   },
 
   checkApiKey() {
@@ -103,8 +141,8 @@ const Game = {
   },
 
   cacheElements() {
-    this.el.countdown = document.getElementById('countdown-time');
     this.el.countdownPhase = document.getElementById('countdown-phase');
+    this.el.phaseLabel = document.getElementById('phase-label');
     this.el.phaseBar = document.getElementById('phase-bar');
     this.el.dialogueArea = document.getElementById('dialogue-area');
     this.el.dialogueOptions = document.getElementById('dialogue-options');
@@ -126,6 +164,18 @@ const Game = {
     this.el.endingScreen = document.getElementById('ending-screen');
     this.el.cutsceneOverlay = document.getElementById('cutscene-overlay');
     this.el.phaseTransition = document.getElementById('phase-transition');
+    // Phase prompt modal
+    this.el.phasePromptOverlay = document.getElementById('phase-prompt-overlay');
+    this.el.phasePromptIcon = document.getElementById('phase-prompt-icon');
+    this.el.phasePromptTitle = document.getElementById('phase-prompt-title');
+    this.el.phasePromptBody = document.getElementById('phase-prompt-body');
+    this.el.phasePromptActions = document.getElementById('phase-prompt-actions');
+    this.el.phasePromptHint = document.getElementById('phase-prompt-hint');
+    // Save system
+    this.el.saveBtn = document.getElementById('save-btn');
+    this.el.savePanelOverlay = document.getElementById('save-panel-overlay');
+    this.el.saveSlots = document.getElementById('save-slots');
+    this.el.savePanelClose = document.getElementById('save-panel-close');
     this.el.apiKeyInput = document.getElementById('api-key-input');
     this.el.apiKeyModal = document.getElementById('api-key-modal');
     this.el.apiKeyModalInput = document.getElementById('api-key-modal-input');
@@ -136,7 +186,7 @@ const Game = {
     this.el.drawerOverlay = document.getElementById('drawer-overlay');
     this.el.bottomNav = document.getElementById('mobile-bottom-nav');
     this.el.mobileCountdown = document.getElementById('mobile-countdown');
-    this.el.drawerNavLinks = document.querySelectorAll('#drawer-nav-links .drawer-nav-item');
+    this.el.drawerNavLinks = null;
     this.el.bottomNavItems = document.querySelectorAll('#mobile-bottom-nav .bottom-nav-item');
   },
 
@@ -178,6 +228,15 @@ const Game = {
         e.preventDefault();
         this.handlePlayerInput();
       }
+    });
+    this.el.playerInput.addEventListener('input', () => this.adaptTextarea());
+    // IME 组合保护：组合期间跳过高度适配（避免光标跳动），组合结束后补一次校准
+    this.el.playerInput.addEventListener('compositionstart', () => {
+      this.state.composingInput = true;
+    });
+    this.el.playerInput.addEventListener('compositionend', () => {
+      this.state.composingInput = false;
+      this.adaptTextarea();
     });
 
     // Report editor
@@ -232,6 +291,20 @@ const Game = {
     if (this.el.apiKeyModalSkip) {
       this.el.apiKeyModalSkip.addEventListener('click', () => this.handleApiKeySkip());
     }
+
+    // Save system
+    if (this.el.saveBtn) {
+      this.el.saveBtn.addEventListener('click', () => this.toggleSavePanel());
+    }
+    if (this.el.savePanelOverlay) {
+      this.el.savePanelOverlay.addEventListener('click', (e) => {
+        if (e.target === this.el.savePanelOverlay) this.hideSavePanel();
+      });
+    }
+    if (this.el.savePanelClose) {
+      this.el.savePanelClose.addEventListener('click', () => this.hideSavePanel());
+    }
+
     if (this.el.apiKeyModalInput) {
       this.el.apiKeyModalInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
@@ -269,21 +342,6 @@ const Game = {
       });
     }
 
-    // Mobile: drawer nav links view switching
-    if (this.el.drawerNavLinks) {
-      this.el.drawerNavLinks.forEach(item => {
-        item.addEventListener('click', () => {
-          if (item.classList.contains('locked')) return;
-          this.switchView(item.dataset.view);
-          // Close drawer after navigation
-          document.body.classList.remove('drawer-open');
-          if (this.el.drawerOverlay) {
-            this.el.drawerOverlay.classList.remove('show');
-          }
-        });
-      });
-    }
-
   },
 
   initConversations() {
@@ -293,63 +351,21 @@ const Game = {
   },
 
   // ════════════════════════════════════
-  // 机器人行为循环系统（P1 - brief-07）
-  // ════════════════════════════════════
-
-  initRobotCycles() {
-    const state = {};
-    for (const [npcId, behavior] of Object.entries(GAME_DATA.robot_behaviors)) {
-      state[npcId] = {
-        cycleIndex: 0,
-        location: behavior.cycle[0].location,
-        action: behavior.cycle[0].action,
-        elapsed: 0,
-      };
-    }
-    this.state.robotCycleState = state;
-  },
-
-  advanceRobotCycles(gameMinutes) {
-    if (!this.state.robotCycleState) return;
-    const gameSeconds = gameMinutes * 60;
-    for (const [npcId, rs] of Object.entries(this.state.robotCycleState)) {
-      const behavior = GAME_DATA.robot_behaviors[npcId];
-      if (!behavior) continue;
-      rs.elapsed += gameSeconds;
-      while (rs.elapsed >= behavior.cycle[rs.cycleIndex].duration) {
-        rs.elapsed -= behavior.cycle[rs.cycleIndex].duration;
-        rs.cycleIndex = (rs.cycleIndex + 1) % behavior.cycle.length;
-        rs.location = behavior.cycle[rs.cycleIndex].location;
-        rs.action = behavior.cycle[rs.cycleIndex].action;
-      }
-    }
-  },
-
-  getRobotsAtLocation(locId) {
-    if (!this.state.robotCycleState) return [];
-    const robots = [];
-    for (const [npcId, rs] of Object.entries(this.state.robotCycleState)) {
-      if (rs.location === locId) {
-        robots.push({ npcId, action: rs.action });
-      }
-    }
-    return robots;
-  },
-
-  // ════════════════════════════════════
-  // 地点移动系统（P1 - brief-07）
+  // 二·五、地点移动系统
   // ════════════════════════════════════
 
   moveToLocation(locId) {
-    const moveMinutes = 2 + Math.floor(Math.random() * 4);
-    this.state.realStart -= (moveMinutes / 60) * GAME_DATA.time_config.compression * 1000;
-    this.advanceRobotCycles(moveMinutes);
     this.state.currentLocation = locId;
     this.state.currentNPC = null;
     this.renderLocations();
     this.renderLocationView();
     this.renderNPCList();
     this.renderTerminalHeader(null);
+    // 移动端：选择地点后自动关闭抽屉
+    document.body.classList.remove('drawer-open');
+    if (this.el.drawerOverlay) {
+      this.el.drawerOverlay.classList.remove('show');
+    }
   },
 
   renderLocationView() {
@@ -365,7 +381,6 @@ const Game = {
     this.switchView('terminal');
 
     const desc = GAME_DATA.location_descriptions[locId] || loc.desc;
-    const robots = this.getRobotsAtLocation(locId);
     const connections = GAME_DATA.location_connections[locId] || [];
 
     let html = '<div class="location-view">';
@@ -373,9 +388,14 @@ const Game = {
     html += '<div class="location-divider">═══════════════════════════════════</div>';
     html += `<div class="location-desc">${desc}</div>`;
 
-    if (robots.length > 0) {
+    // 机器人固定位置在场显示（robot_locations 替代原巡逻）
+    const robotsHere = [];
+    for (const [npcId, rl] of Object.entries(GAME_DATA.robot_locations || {})) {
+      if (rl.location === locId) robotsHere.push({ npcId, action: rl.action });
+    }
+    if (robotsHere.length > 0) {
       html += '<div class="location-robots">';
-      robots.forEach(r => {
+      robotsHere.forEach(r => {
         const data = GAME_DATA.dialogue[r.npcId];
         if (data) {
           html += `<div class="location-robot-item"><span class="robot-presence">[ ${data.npc} 正在这里，${r.action} ]</span></div>`;
@@ -386,9 +406,7 @@ const Game = {
 
     if (locId === 'engineering') {
       html += '<div class="location-robot-item"><span class="robot-presence">[ 陈远正坐在工位前，假装在忙碌 ]</span></div>';
-    }
-
-    if (robots.length === 0 && locId !== 'engineering') {
+    } else if (robotsHere.length === 0) {
       html += '<div class="location-empty">[ 这里没有其他人 ]</div>';
     }
 
@@ -396,7 +414,7 @@ const Game = {
 
     const talkableNPCs = [];
     if (locId === 'engineering') talkableNPCs.push('副工程师');
-    robots.forEach(r => talkableNPCs.push(r.npcId));
+    robotsHere.forEach(r => talkableNPCs.push(r.npcId));
 
     talkableNPCs.forEach(npcId => {
       const data = GAME_DATA.dialogue[npcId];
@@ -423,6 +441,13 @@ const Game = {
     if (locId === 'habitat') {
       if (this.canRestToNextPhase()) {
         html += `<button class="location-action-btn rest-btn" id="habitat-rest-btn">▸ 休息 - 进入${this.state.phase + 1 === 2 ? '交叉验证' : '最终裁决'}阶段</button>`;
+        // Phase 1 首次满足条件时弹窗轻量提醒
+        if (this.state.phase === 1 && !this.state._p1RestNotified) {
+          this.state._p1RestNotified = true;
+          setTimeout(() => {
+            this.showPhasePrompt('p1RestReady');
+          }, 400);
+        }
       }
     }
 
@@ -458,94 +483,29 @@ const Game = {
       div.innerHTML = `<div class="msg-text">${text}</div>`;
       this.el.dialogueArea.appendChild(div);
       this.el.dialogueArea.scrollTop = this.el.dialogueArea.scrollHeight;
-      this.consumeTime('investigation');
     }
   },
 
   // ════════════════════════════════════
-  // 三、游戏主循环
+  // 三、阶段信息显示
   // ════════════════════════════════════
 
-  startGameLoop() {
-    this.state.realStart = Date.now();
-    const tick = () => {
-      this.updateGameTime();
-      this.checkPhaseTransition();
-      this.updateCountdownDisplay();
-      requestAnimationFrame(tick);
+  updatePhaseDisplay() {
+    const phases = {
+      1: { label: 'INVESTIGATION', name: '调查阶段', text: '调查阶段 —— 寻访 NPC，收集证词' },
+      2: { label: 'CROSS-VALIDATION', name: '交叉验证', text: '交叉验证阶段 —— 收集证据，准备指控' },
+      3: { label: 'FINAL REPORT', name: '最终裁决', text: '最终裁决阶段 —— 提交你的调查报告' }
     };
-    tick();
-  },
-
-  updateGameTime() {
-    const elapsed = (Date.now() - this.state.realStart) / 1000; // seconds
-    const compression = GAME_DATA.time_config.compression;
-    this.state.gameTime = elapsed / compression; // game hours
-    if (this.state.gameTime > 48) this.state.gameTime = 48;
-  },
-
-  updateCountdownDisplay() {
-    const remaining = Math.max(0, 48 - this.state.gameTime);
-    const hours = Math.floor(remaining);
-    const mins = Math.floor((remaining - hours) * 60);
-    const secs = Math.floor(((remaining - hours) * 60 - mins) * 60);
-    const timeStr = String(hours).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
-    
-    if (this.el.countdown) {
-      this.el.countdown.textContent = timeStr;
-      this.el.countdown.className = 'countdown-time';
-      if (remaining < 2) this.el.countdown.classList.add('critical');
-      else if (remaining < 6) this.el.countdown.classList.add('danger');
-      else if (remaining < 12) this.el.countdown.classList.add('warning');
-    }
-
-    // Mobile countdown
-    if (this.el.mobileCountdown) {
-      this.el.mobileCountdown.textContent = timeStr;
-      this.el.mobileCountdown.className = 'mobile-countdown';
-      if (remaining < 2) this.el.mobileCountdown.classList.add('critical');
-      else if (remaining < 6) this.el.mobileCountdown.classList.add('danger');
-      else if (remaining < 12) this.el.mobileCountdown.classList.add('warning');
-    }
-
-    const phases = ['调查', '交叉验证', '裁决'];
-    if (this.el.countdownPhase) {
-      this.el.countdownPhase.textContent = phases[this.state.phase - 1] + '阶段';
-    }
+    const info = phases[this.state.phase];
+    if (!info) return;
+    if (this.el.phaseLabel) this.el.phaseLabel.textContent = info.label;
+    if (this.el.countdownPhase) this.el.countdownPhase.textContent = info.text;
+    if (this.el.mobileCountdown) this.el.mobileCountdown.textContent = info.name;
   },
 
   // ════════════════════════════════════
-  // 四、导演逻辑 — 阶段转换
+  // 四、导演逻辑 — 阶段转换（内容驱动，无时间条件）
   // ════════════════════════════════════
-
-  checkPhaseTransition() {
-    const t = this.state.gameTime;
-    
-    // Phase 1 → 2: 12h, talked to all 4 NPCs, asked ≥12 questions, OR player expresses "no one is primarily responsible"
-    if (this.state.phase === 1) {
-      if (this.state.noSingleBlameInsight) {
-        // Player recognized no single person bears primary responsibility
-        this.transitionToPhase(2);
-      } else if (t >= 12) {
-        const talkedNPCs = Object.keys(this.state.conversations).filter(id => this.state.conversations[id].length > 0);
-        if (talkedNPCs.length >= 4 || t >= 14) {
-          this.transitionToPhase(2);
-        }
-      }
-    }
-
-    // Phase 2 → 3: 36h, first accusation refuted
-    if (this.state.phase === 2 && t >= 36) {
-      if (this.state.firstAccusationRefuted || t >= 38) {
-        this.transitionToPhase(3);
-      }
-    }
-
-    // Phase 3 timeout
-    if (this.state.phase === 3 && t >= 48 && !this.state.reportSubmitted) {
-      this.triggerEnding('timeout');
-    }
-  },
 
   transitionToPhase(newPhase) {
     // 防止重复转换到同一阶段
@@ -553,6 +513,7 @@ const Game = {
       return;
     }
     this.state.phase = newPhase;
+    this.updatePhaseDisplay();
     this.showPhaseTransition(newPhase);
     
     // Update phase bar
@@ -575,7 +536,7 @@ const Game = {
     if (newPhase >= 3) {
       this.unlockView('report');
       this.renderLogViewer(); // Re-render to unlock phase3 logs
-      this.addSystemMessage('最终报告提交窗口已开放。请在48小时倒计时结束前提交调查结论。');
+      this.addDirectMessage('最终报告提交窗口已开放。当你做好准备，即可提交你的调查报告。');
     }
   },
 
@@ -604,10 +565,6 @@ const Game = {
     // Mobile bottom nav
     const bottomNavItem = document.querySelector(`.bottom-nav-item[data-view="${viewName}"]`);
     if (bottomNavItem) bottomNavItem.classList.remove('locked');
-    
-    // Mobile drawer nav
-    const drawerNavItem = document.querySelector(`.drawer-nav-item[data-view="${viewName}"]`);
-    if (drawerNavItem) drawerNavItem.classList.remove('locked');
   },
 
   // ════════════════════════════════════
@@ -630,16 +587,6 @@ const Game = {
         }
       });
     }
-    
-    // Mobile drawer nav
-    if (this.el.drawerNavLinks) {
-      this.el.drawerNavLinks.forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.view === viewName) {
-          item.classList.add('active');
-        }
-      });
-    }
   },
 
   // ════════════════════════════════════
@@ -655,8 +602,8 @@ const Game = {
       return talked.length >= 4;
     }
     if (this.state.phase === 2) {
-      // Phase 2 → 3: at least one accusation refuted
-      return this.state.firstAccusationRefuted;
+      // Phase 2 → 3: 指控已回应或选择不指控
+      return this.state.canAdvanceToPhase3;
     }
     return false;
   },
@@ -664,7 +611,7 @@ const Game = {
   // Rest: jump game time to next phase trigger
   restToNextPhase() {
     const narratives = [
-      '你在生活舱里躺了一会儿，整理了一下手头的线索。窗外暗红色的星球缓缓转动。你闭上了眼。',
+      '你在住舱里躺了一会儿，整理了一下手头的线索。窗外暗红色的星球缓缓转动。你闭上了眼。',
       '你坐在书桌前，把所有线索排列了一遍。某种模糊的轮廓正在浮现。你决定休息一下。',
       '在这个站上，连睡眠都是一种等待。你躺下，盯着天花板。'
     ];
@@ -672,15 +619,8 @@ const Game = {
     
     this.el.dialogueArea.innerHTML = `<div class="msg system"><div class="msg-text" style="font-style:italic;line-height:2;">${narrative}</div></div>`;
     
-    setTimeout(() => {
-      const targetTime = this.state.phase === 1 ? 12 : 36;
-      const currentTime = this.state.gameTime;
-      const jump = targetTime - currentTime;
-      if (jump > 0) {
-        this.state.realStart -= jump * GAME_DATA.time_config.compression * 1000;
-        this.advanceRobotCycles(jump * 60);
-      }
-    }, 2000);
+    const nextPhase = this.state.phase + 1;
+    setTimeout(() => this.transitionToPhase(nextPhase), 2000);
   },
 
   // 渲染侧边栏地点导航（基于 location_connections，高亮当前地点）
@@ -753,8 +693,12 @@ const Game = {
     this.renderDialogueArea();
     this.showFirstTimeGuide();
     this.renderDialogueOptions();
-    // Update input placeholder with NPC-specific hint
-    this.updateInputPlaceholder(npcId);
+    // 移动端：选中对话对象后自动关闭抽屉
+    document.body.classList.remove('drawer-open');
+    if (this.el.drawerOverlay) {
+      this.el.drawerOverlay.classList.remove('show');
+    }
+    this.adaptTextarea(); // 初始校准输入框高度
   },
 
   // Show first-time dialogue guidance (localStorage-based, once per browser)
@@ -782,16 +726,52 @@ const Game = {
     } catch(e) {}
   },
 
-  updateInputPlaceholder(npcId) {
-    const input = this.el.playerInput;
-    if (!input) return;
-    const hints = {
-      'R-7': '问R-7关于概率、警报、退出原因、或者那天晚上...',
-      'S-3': '问S-3关于心率监测、风险评估、或者它对工程师的看法...',
-      'D-5': '直接问D-5：你发现了什么？为什么不提醒？',
-      '副工程师': '追问陈远的不在场证明、校准记录、那天晚上...',
-    };
-    input.placeholder = hints[npcId] || '直接打字提问——任何问题都会得到回应...';
+  adaptTextarea() {
+    const ta = this.el.playerInput;
+    if (!ta) return;
+    // IME 组合中跳过（组合结束会补一次）
+    if (this.state.composingInput) return;
+    const mirror = this.el.inputMirror;
+    if (!mirror) return;
+    // 同步宽度（窗口变化时跟随）
+    mirror.style.width = ta.clientWidth + 'px';
+    // 同步内容（末尾补换行占位，保证末尾换行时高度正确）
+    mirror.textContent = ta.value + '\n';
+    const newH = Math.min(mirror.scrollHeight, 120);
+    if (Math.abs(newH - ta.offsetHeight) > 2) {
+      // 延迟到下一帧设置，避免 input 同步阶段重排干扰 IME 锚点
+      requestAnimationFrame(() => {
+        ta.style.height = newH + 'px';
+      });
+    }
+  },
+
+  // 创建隐藏镜像 div：样式与输入框完全一致，用于测量内容高度（不重排输入框本身）
+  initInputMirror() {
+    const ta = this.el.playerInput;
+    if (!ta) return;
+    const cs = getComputedStyle(ta);
+    const mirror = document.createElement('div');
+    mirror.style.cssText = [
+      'position:absolute',
+      'left:-9999px',
+      'top:0',
+      'visibility:hidden',
+      'white-space:pre-wrap',
+      'overflow-wrap:break-word',
+      'word-break:break-word',
+      'width:' + ta.clientWidth + 'px',
+      'font-family:' + cs.fontFamily,
+      'font-size:' + cs.fontSize,
+      'font-weight:' + cs.fontWeight,
+      'line-height:' + cs.lineHeight,
+      'letter-spacing:' + cs.letterSpacing,
+      'padding:' + cs.paddingTop + ' ' + cs.paddingRight + ' ' + cs.paddingBottom + ' ' + cs.paddingLeft,
+      'min-height:36px',
+      'max-height:120px'
+    ].join(';');
+    document.body.appendChild(mirror);
+    this.el.inputMirror = mirror;
   },
 
   renderTerminalHeader(npcId) {
@@ -857,9 +837,22 @@ const Game = {
     
     let html = '';
     
-    // Phase 2+: Show accusation option
+    // Phase 2+: 指控区（10 条解锁指控 / 20 条解锁不指控 / 已指控消失）
     if (this.state.phase >= 2) {
-      html += `<button class="dialogue-option" data-accuse="${npcId}" style="border-color:var(--danger-red);color:var(--danger-red);">[指控] 正式指控${data.npc}</button>`;
+      if (this.state.accusedNPCs.has(npcId)) {
+        html += `<div class="typing-encouragement" style="color:var(--visited-green);">你已正式指控过${data.npc}。可切换其他对话对象继续指控。</div>`;
+      } else if (!this.state.accusationUnlocked) {
+        html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[指控] 需要更多证据（已发现 ${this.state.discoveredClues.size}/10）</button>`;
+      } else {
+        html += `<button class="dialogue-option" data-accuse="${npcId}" style="border-color:var(--danger-red);color:var(--danger-red);">[指控] 正式指控${data.npc}</button>`;
+      }
+      if (!this.state.canAdvanceToPhase3) {
+        if (this.state.noAccusationUnlocked) {
+          html += `<button class="dialogue-option" data-noaccuse="1" style="border-color:var(--text-dim);color:var(--text-dim);">[不指控] 不指控任何人 —— 问题或许不在个体</button>`;
+        } else {
+          html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[不指控] 需要更多证据（已发现 ${this.state.discoveredClues.size}/20）</button>`;
+        }
+      }
     }
     
     // Encourage typing
@@ -868,10 +861,12 @@ const Game = {
     
     opts.innerHTML = html;
     
-    // Bind accusation button
+    // Bind buttons
     opts.querySelectorAll('.dialogue-option').forEach(btn => {
       if (btn.dataset.accuse) {
         btn.addEventListener('click', () => this.initiateAccusation(btn.dataset.accuse));
+      } else if (btn.dataset.noaccuse) {
+        btn.addEventListener('click', () => this.initiateNoAccusation());
       }
     });
   },
@@ -883,12 +878,12 @@ const Game = {
     
     const npcId = this.state.currentNPC;
     if (!npcId) {
-      this.addSystemMessage('请先选择一个对话对象。');
+      this.addDirectMessage('请先选择一个对话对象。');
       return;
     }
     
     input.value = '';
-    this.consumeTime('dialogue');
+    this.adaptTextarea();
     
     // Show player message
     this.appendPlayerMessage(text);
@@ -938,11 +933,12 @@ const Game = {
     const lowerText = text.toLowerCase();
     const triggered = phase3Keywords.some(keyword => lowerText.includes(keyword));
     
-    if (triggered) {
-      console.log('[HELIOS] Phase 3 triggered by keyword:', text);
+    if (triggered && !this.state.zeroLawTriggered) {
       this.state.zeroLawTriggered = true;
-      this.transitionToPhase(3);
-      this.addSystemMessage('⚠️ 调查员提到了修改守则或第零法则的概念。最终裁决窗口已开放。');
+      // 触及核心洞察即可通过休息推进（弹窗提示与休息按钮保持一致）
+      this.state.canAdvanceToPhase3 = true;
+      console.log('[HELIOS] Phase 3 insight by keyword:', text);
+      this.showPhasePrompt('zerothLaw');
     }
   },
 
@@ -1005,8 +1001,7 @@ const Game = {
     ctx.player_inquiries.push({
       npc: npcId,
       topic: topic,
-      summary: playerText.slice(0, 50),
-      time: this.getTimeStr()
+      summary: playerText.slice(0, 50)
     });
 
     // 记录已发现线索到 disclosed_info
@@ -1124,7 +1119,7 @@ const Game = {
     const area = this.el.dialogueArea;
     const div = document.createElement('div');
     div.className = 'msg player';
-    div.innerHTML = `<div class="msg-text">${this.escape(text)}</div><div class="msg-time">${this.getTimeStr()}</div>`;
+    div.innerHTML = `<div class="msg-text">${this.escape(text)}</div>`;
     area.appendChild(div);
     area.scrollTop = area.scrollHeight;
   },
@@ -1135,7 +1130,7 @@ const Game = {
     const div = document.createElement('div');
     div.className = 'msg npc';
     const speaker = data ? data.npc : npcId;
-    div.innerHTML = `<div class="msg-text"><span style="color:${data?.color || '#c8d6e5'}">${speaker}:</span> ${this.escape(text)}</div><div class="msg-time">${this.getTimeStr()}</div>`;
+    div.innerHTML = `<div class="msg-text"><span style="color:${data?.color || '#c8d6e5'}">${speaker}:</span> ${this.escape(text)}</div>`;
     area.appendChild(div);
     area.scrollTop = area.scrollHeight;
   },
@@ -1146,10 +1141,8 @@ const Game = {
     this.state.conversations[npcId].push({ role: 'npc', text: text, isSystem: !!isSystem });
   },
 
-  addSystemMessage(text) {
-    if (this.state.currentNPC) {
-      this.state.conversations[this.state.currentNPC].push({ role: 'system', text: text });
-    }
+  // 事件性系统消息：只渲染到当前对话区，不推入对话历史（切换 NPC 后不重放）
+  addDirectMessage(text) {
     const area = this.el.dialogueArea;
     if (!area) return;
     const div = document.createElement('div');
@@ -1159,8 +1152,9 @@ const Game = {
     area.scrollTop = area.scrollHeight;
   },
 
+  // 历史重放用：渲染历史中的 system 消息（旧存档兼容）
   appendSystemMessage(text) {
-    this.addSystemMessage(text);
+    this.addDirectMessage(text);
   },
 
   showTypingIndicator(npcId) {
@@ -1193,7 +1187,17 @@ const Game = {
     this.state.discoveredClues.add(clue.id);
     clue.discovered = true;
     
-    this.addSystemMessage(`[线索发现] ${clue.name} — ${clue.content}`);
+    // 10 条：解锁指控；20 条：解锁不指控
+    if (!this.state.accusationUnlocked && this.state.discoveredClues.size >= 10) {
+      this.state.accusationUnlocked = true;
+      this.addDirectMessage('📋 你已收集到足够的证据（10 条）。指控功能已解锁——当你准备好时，可以正式发起指控。');
+    }
+    if (!this.state.noAccusationUnlocked && this.state.discoveredClues.size >= 20) {
+      this.state.noAccusationUnlocked = true;
+      this.addDirectMessage('📋 证据已足够深入（20 条）。你也可以选择不指控任何人——问题或许不在个体。');
+    }
+    
+    this.addDirectMessage(`[线索发现] ${clue.name} — ${clue.content}`);
     this.renderEvidenceBoard();
     this.renderTimeline();
   },
@@ -1208,7 +1212,7 @@ const Game = {
       const noBlameKeywords = ['没有谁', '没人', '不怪', '不是谁的错', '都有责任', '都有错', '共同责任', '系统问题', '框架问题', '定律问题', '三定律矛盾', '定律漏洞', '不是任何一个人', '不是某个人', '每个人都有份'];
       if (noBlameKeywords.some(kw => lowerText.includes(kw))) {
         this.state.noSingleBlameInsight = true;
-        this.addSystemMessage('[洞察] 你意识到这可能不是某一个人的错——也许是规则本身出了问题。这个想法值得深入。');
+        this.addDirectMessage('[洞察] 你意识到这可能不是某一个人的错——也许是规则本身出了问题。这个想法值得深入。');
       }
     }
     
@@ -1264,7 +1268,7 @@ const Game = {
     debugInfo.push('✅ 解锁完成！');
     
     // 在页面上显示调试信息
-    this.addSystemMessage('[复盘模式] ' + debugInfo.join(' | '));
+    this.addDirectMessage('[复盘模式] ' + debugInfo.join(' | '));
     
     // 同时输出到控制台
     debugInfo.forEach(msg => console.log('[DEBUG] ' + msg));
@@ -1380,7 +1384,6 @@ const Game = {
             const log = GAME_DATA.logs.find(l => l.id === logId);
             if (log && log.clue_unlock) {
               this.discoverClue(log.clue_unlock);
-              this.consumeTime('log_query');
             }
           }
         }
@@ -1396,48 +1399,377 @@ const Game = {
 
   initiateAccusation(npcId) {
     this.state.accusationCount++;
-    this.consumeTime('accusation');
-    
-    this.addSystemMessage(`[正式指控] 你指控 ${GAME_DATA.dialogue[npcId].npc} 对事故负有责任。`);
-    this.addSystemMessage('[交叉验证启动] 正在调取其他机器人数据...');
-    
-    // Show NPC defense first
+    this.state.accusedNPCs.add(npcId);
+    this.renderDialogueOptions();
+
+    this.addDirectMessage(`[正式指控] 你指控 ${GAME_DATA.dialogue[npcId].npc} 对事故负有责任。`);
+
+    // 陈远：人类自辩，走 LLM Defense Prompt，无交叉验证、无兜底
+    if (npcId === '副工程师') {
+      this.addDirectMessage('[回应中] 陈远正在组织他的陈述...');
+      this.showTypingIndicator(npcId);
+      const defensePrompt = GAME_DATA.dialogue[npcId].defense_prompt;
+      this.callLLM(defensePrompt, npcId, '我正式指控你对事故负有责任。')
+        .then(response => {
+          this.removeTypingIndicator();
+          this.appendNPCMessage(npcId, response);
+          this.state.conversations[npcId].push({ role: 'npc', text: response });
+          this.finishAccusation(npcId);
+        })
+        .catch(e => {
+          this.removeTypingIndicator();
+          console.error('[HELIOS] 陈远自辩 LLM 失败:', e);
+          const fallback = '...[通讯干扰，请稍后重试]...';
+          this.appendNPCMessage(npcId, fallback);
+          this.state.conversations[npcId].push({ role: 'npc', text: fallback, isSystem: true });
+          this.finishAccusation(npcId);
+        });
+      return;
+    }
+
+    // 机器人：交叉验证流程（辩护 → 其他机器人回击 → 矛盾分析）
+    this.addDirectMessage('[交叉验证启动] 正在调取其他机器人数据...');
     setTimeout(() => {
       const cv = GAME_DATA.cross_validation[npcId];
-      if (!cv) return;
+      if (!cv) { this.finishAccusation(npcId); return; }
       
       // Target's defense
-      this.addSystemMessage(`${GAME_DATA.dialogue[npcId].npc} 的辩护:`);
+      this.addDirectMessage(`${GAME_DATA.dialogue[npcId].npc} 的辩护:`);
       setTimeout(() => {
         this.appendNPCMessage(npcId, cv.response);
         this.state.conversations[npcId].push({ role: 'npc', text: cv.response });
         
         // Other robots' counter-evidence
         setTimeout(() => {
-          this.addSystemMessage('[交叉验证] 其他机器人数据回击:');
+          this.addDirectMessage('[交叉验证] 其他机器人数据回击:');
           const others = Object.keys(GAME_DATA.cross_validation).filter(k => k !== npcId);
           others.forEach((otherId, i) => {
             setTimeout(() => {
               const otherCV = GAME_DATA.cross_validation[otherId];
               this.appendNPCMessage(otherId, `[针对${GAME_DATA.dialogue[npcId].npc}的指控] ${otherCV.response}`);
-              this.addSystemMessage(`证据: ${otherCV.evidence} (来源: ${otherCV.source})`);
+              this.addDirectMessage(`证据: ${otherCV.evidence} (来源: ${otherCV.source})`);
             }, i * 1500);
           });
           
           // Contradiction statement
           setTimeout(() => {
             const cvData = GAME_DATA.cross_validation[npcId];
-            this.addSystemMessage(`[矛盾分析] ${cvData.contradiction}`);
-            this.addSystemMessage('[系统] 你的指控已被反驳。三台机器人的行为在字面上均未违反三定律。');
-            
-            if (!this.state.firstAccusationRefuted) {
-              this.state.firstAccusationRefuted = true;
-              this.addSystemMessage('[提示] 也许...问题不在于某一台机器人。也许应该想想规则本身。');
-            }
+            this.addDirectMessage(`[矛盾分析] ${cvData.contradiction}`);
+            this.addDirectMessage('[系统] 你的指控已被回应。三台机器人的行为在字面上均未违反三定律。');
+            this.finishAccusation(npcId);
           }, others.length * 1500 + 500);
         }, 1000);
       }, 800);
     }, 500);
+  },
+
+  // 指控流程收尾：标志位 + 首次提示 + 弹窗通知（不自动跳转）
+  finishAccusation(npcId) {
+    if (!this.state.firstAccusationRefuted) {
+      this.state.firstAccusationRefuted = true;
+      this.addDirectMessage('[提示] 也许...问题不在于某一台机器人。也许应该想想规则本身。');
+    }
+    this.state.canAdvanceToPhase3 = true;
+    this.renderDialogueOptions();
+    this.showPhasePrompt('accusationDone', () => {
+      this.addDirectMessage('提示：前往住舱，选择"休息"即可进入最终裁决阶段。');
+    });
+  },
+
+  // 不指控任何人：正式出口
+  initiateNoAccusation() {
+    if (this.state.canAdvanceToPhase3) return;
+    this.addDirectMessage('你选择不指控任何个体。如果每台机器人和每个人都做了自己认为正确的事而事故仍发生——那问题可能在规则本身。');
+    this.state.canAdvanceToPhase3 = true;
+    this.renderDialogueOptions();
+    this.showPhasePrompt('noAccusation', () => {
+      this.addDirectMessage('提示：前往住舱，选择"休息"即可进入最终裁决阶段。');
+    });
+  },
+
+  // ════════════════════════════════════
+  // 十一·五、阶段推进确认弹窗
+  // ════════════════════════════════════
+
+  showPhasePrompt(type, onClose) {
+    const overlay = this.el.phasePromptOverlay;
+    if (!overlay) return;
+    const icon = this.el.phasePromptIcon;
+    const title = this.el.phasePromptTitle;
+    const body = this.el.phasePromptBody;
+    const actions = this.el.phasePromptActions;
+    const hint = this.el.phasePromptHint;
+    if (!title || !body || !actions) return;
+
+    actions.innerHTML = '';
+    const closeWith = () => {
+      this.hidePhasePrompt();
+      if (onClose) onClose();
+    };
+
+    if (type === 'zerothLaw') {
+      icon.textContent = '⚡';
+      title.textContent = '关键洞察';
+      body.textContent = '你在调查中触及了更深层的伦理问题——关于法则本身。\n是否进入最终裁决阶段？';
+      hint.textContent = '提示：你随时可以前往住舱「休息」来推进阶段。';
+      const btnGo = document.createElement('button');
+      btnGo.className = 'phase-prompt-btn primary';
+      btnGo.textContent = '进入下一阶段';
+      btnGo.addEventListener('click', () => {
+        this.hidePhasePrompt();
+        this.transitionToPhase(3);
+      });
+      const btnStay = document.createElement('button');
+      btnStay.className = 'phase-prompt-btn';
+      btnStay.textContent = '继续当前调查';
+      btnStay.addEventListener('click', closeWith);
+      actions.appendChild(btnGo);
+      actions.appendChild(btnStay);
+    } else if (type === 'accusationDone') {
+      icon.textContent = '📋';
+      title.textContent = '指控阶段结束';
+      body.textContent = '指控已得到回应。你可以前往住舱「休息」，进入最终裁决阶段，提交你的调查报告。';
+      hint.textContent = '';
+      const btnOk = document.createElement('button');
+      btnOk.className = 'phase-prompt-btn primary';
+      btnOk.textContent = '知道了';
+      btnOk.addEventListener('click', closeWith);
+      actions.appendChild(btnOk);
+    } else if (type === 'noAccusation') {
+      icon.textContent = '📋';
+      title.textContent = '指控阶段结束';
+      body.textContent = '你选择不指控任何个体。你可以前往住舱「休息」，进入最终裁决阶段。';
+      hint.textContent = '';
+      const btnOk = document.createElement('button');
+      btnOk.className = 'phase-prompt-btn primary';
+      btnOk.textContent = '知道了';
+      btnOk.addEventListener('click', closeWith);
+      actions.appendChild(btnOk);
+    } else if (type === 'p1RestReady') {
+      icon.textContent = '🛏️';
+      title.textContent = '调查进展';
+      body.textContent = '你已与站上所有人员交谈完毕。可以休息，进入交叉验证阶段。';
+      hint.textContent = '点击下方「休息」按钮即可进入下一阶段。';
+      const btnOk = document.createElement('button');
+      btnOk.className = 'phase-prompt-btn primary';
+      btnOk.textContent = '知道了';
+      btnOk.addEventListener('click', closeWith);
+      actions.appendChild(btnOk);
+    } else if (type === 'exitConfirm') {
+      icon.textContent = '💾';
+      title.textContent = '退出前提醒';
+      body.textContent = '离开前记得保存存档，否则当前进度会丢失。';
+      hint.textContent = '';
+      const btnSave = document.createElement('button');
+      btnSave.className = 'phase-prompt-btn primary';
+      btnSave.textContent = '先去存档';
+      btnSave.addEventListener('click', () => {
+        this.hidePhasePrompt();
+        this.toggleSavePanel();
+      });
+      const btnExit = document.createElement('button');
+      btnExit.className = 'phase-prompt-btn';
+      btnExit.textContent = '直接退出';
+      btnExit.addEventListener('click', () => {
+        this.hidePhasePrompt();
+        const AppPlugin = window.Capacitor?.Plugins?.App;
+        if (AppPlugin) AppPlugin.exitApp();
+      });
+      const btnStay = document.createElement('button');
+      btnStay.className = 'phase-prompt-btn';
+      btnStay.textContent = '取消';
+      btnStay.addEventListener('click', closeWith);
+      actions.appendChild(btnSave);
+      actions.appendChild(btnExit);
+      actions.appendChild(btnStay);
+    }
+
+    overlay.classList.add('show');
+  },
+
+  hidePhasePrompt() {
+    const overlay = this.el.phasePromptOverlay;
+    if (overlay) overlay.classList.remove('show');
+  },
+
+  // ════════════════════════════════════
+  // 十一·六、存档系统（第二波）
+  // ════════════════════════════════════
+
+  serializeState() {
+    return {
+      version: 1,
+      timestamp: Date.now(),
+      phase: this.state.phase,
+      currentLocation: this.state.currentLocation,
+      currentNPC: this.state.currentNPC,
+      conversations: this.state.conversations,
+      discoveredClues: Array.from(this.state.discoveredClues),
+      visitedNodes: Array.from(this.state.visitedNodes),
+      askedQuestions: Array.from(this.state.askedQuestions),
+      sharedAgentContext: this.state.sharedAgentContext ? JSON.parse(JSON.stringify(this.state.sharedAgentContext)) : null,
+      accusationCount: this.state.accusationCount,
+      accusedNPCs: Array.from(this.state.accusedNPCs),
+      firstAccusationRefuted: this.state.firstAccusationRefuted,
+      noSingleBlameInsight: this.state.noSingleBlameInsight,
+      canAdvanceToPhase3: this.state.canAdvanceToPhase3,
+      zeroLawTriggered: this.state.zeroLawTriggered,
+      accusationUnlocked: this.state.accusationUnlocked,
+      noAccusationUnlocked: this.state.noAccusationUnlocked,
+      dataSubTab: this.state.dataSubTab,
+      reportDraft: this.state.reportDraft || ''
+    };
+  },
+
+  restoreState(save) {
+    this.state.phase = save.phase || 1;
+    this.state.currentLocation = save.currentLocation || 'corridor';
+    this.state.currentNPC = save.currentNPC || null;
+    this.state.conversations = save.conversations || {};
+    this.state.discoveredClues = new Set(save.discoveredClues || []);
+    this.state.visitedNodes = new Set(save.visitedNodes || []);
+    this.state.askedQuestions = new Set(save.askedQuestions || []);
+    this.state.sharedAgentContext = save.sharedAgentContext ? JSON.parse(JSON.stringify(save.sharedAgentContext)) : null;
+    this.state.accusationCount = save.accusationCount || 0;
+    this.state.accusedNPCs = new Set(save.accusedNPCs || []);
+    this.state.firstAccusationRefuted = !!save.firstAccusationRefuted;
+    this.state.noSingleBlameInsight = !!save.noSingleBlameInsight;
+    this.state.canAdvanceToPhase3 = !!save.canAdvanceToPhase3;
+    this.state.zeroLawTriggered = !!save.zeroLawTriggered;
+    this.state.accusationUnlocked = !!save.accusationUnlocked;
+    this.state.noAccusationUnlocked = !!save.noAccusationUnlocked;
+    // 旧档兼容：按当前线索数重算门槛（免疫旧阈值/缺失字段的存档）
+    if (this.state.discoveredClues.size >= 10) this.state.accusationUnlocked = true;
+    if (this.state.discoveredClues.size >= 20) this.state.noAccusationUnlocked = true;
+    this.state.dataSubTab = save.dataSubTab || 'logs';
+    this.state.reportDraft = save.reportDraft || '';
+    // 同步线索 discovered 标记
+    GAME_DATA.clues.forEach(c => {
+      c.discovered = this.state.discoveredClues.has(c.id);
+    });
+  },
+
+  saveGame(slot) {
+    try {
+      const save = this.serializeState();
+      localStorage.setItem('helios_save_' + slot, JSON.stringify(save));
+      this.renderSavePanel();
+      this.addDirectMessage(`[存档] 已保存到存档位 ${slot + 1}。`);
+    } catch (e) {
+      console.error('[HELIOS] 存档失败:', e);
+      this.addDirectMessage('[存档] 保存失败：' + e.message);
+    }
+  },
+
+  loadGame(slot) {
+    try {
+      const raw = localStorage.getItem('helios_save_' + slot);
+      if (!raw) return;
+      const save = JSON.parse(raw);
+      if (!save || typeof save !== 'object') throw new Error('存档数据损坏');
+      this.restoreState(save);
+      // 全量重渲染
+      this.renderLocations();
+      this.renderNPCList();
+      this.renderTerminalHeader(this.state.currentNPC);
+      this.renderDialogueArea();
+      this.renderDialogueOptions();
+      this.renderEvidenceBoard();
+      this.renderLogViewer();
+      this.renderTimeline();
+      this.renderLocationView();
+      this.updatePhaseDisplay();
+      // 按阶段解锁视图
+      if (this.state.phase >= 2) this.unlockView('evidence');
+      if (this.state.phase >= 3) this.unlockView('report');
+      this.hideSavePanel();
+      const phaseName = this.state.phase === 1 ? '调查' : (this.state.phase === 2 ? '交叉验证' : '最终裁决');
+      this.addDirectMessage(`[存档] 已加载存档位 ${slot + 1}，回到${phaseName}阶段。`);
+    } catch (e) {
+      console.error('[HELIOS] 读档失败:', e);
+      this.addDirectMessage('[存档] 读取失败：' + e.message);
+    }
+  },
+
+  deleteGame(slot) {
+    try {
+      localStorage.removeItem('helios_save_' + slot);
+      this.renderSavePanel();
+      this.addDirectMessage(`[存档] 已删除存档位 ${slot + 1}。`);
+    } catch (e) {
+      console.error('[HELIOS] 删除存档失败:', e);
+    }
+  },
+
+  toggleSavePanel() {
+    const panel = this.el.savePanelOverlay;
+    if (!panel) return;
+    if (panel.classList.contains('show')) {
+      this.hideSavePanel();
+    } else {
+      this.renderSavePanel();
+      panel.classList.add('show');
+    }
+  },
+
+  hideSavePanel() {
+    const panel = this.el.savePanelOverlay;
+    if (panel) panel.classList.remove('show');
+  },
+
+  renderSavePanel() {
+    const slots = this.el.saveSlots;
+    if (!slots) return;
+    const phaseNames = { 1: '调查阶段', 2: '交叉验证', 3: '最终裁决' };
+    let html = '';
+    for (let i = 0; i < 3; i++) {
+      let data = null;
+      try {
+        const raw = localStorage.getItem('helios_save_' + i);
+        if (raw) data = JSON.parse(raw);
+      } catch (e) { data = null; }
+      html += `<div class="save-slot ${data ? 'filled' : 'empty'}">`;
+      html += `<div class="save-slot-header">存档 ${i + 1}`;
+      if (data) {
+        const d = new Date(data.timestamp);
+        const timeStr = `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        html += `<span class="save-slot-meta">${phaseNames[data.phase] || '未知'} · ${timeStr} · 线索 ${(data.discoveredClues || []).length} 条</span>`;
+      } else {
+        html += `<span class="save-slot-meta">空</span>`;
+      }
+      html += `</div>`;
+      html += `<div class="save-slot-actions">`;
+      if (data) {
+        html += `<button class="save-action-btn" data-slot="${i}" data-act="load">加载</button>`;
+        html += `<button class="save-action-btn" data-slot="${i}" data-act="overwrite">覆盖</button>`;
+        html += `<button class="save-action-btn" data-slot="${i}" data-act="delete">删除</button>`;
+      } else {
+        html += `<button class="save-action-btn" data-slot="${i}" data-act="save">保存</button>`;
+      }
+      html += `</div></div>`;
+    }
+    slots.innerHTML = html;
+    slots.querySelectorAll('.save-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.handleSaveAction(parseInt(btn.dataset.slot), btn.dataset.act));
+    });
+  },
+
+  handleSaveAction(slot, act) {
+    if (act === 'save') {
+      this.saveGame(slot);
+    } else if (act === 'overwrite') {
+      if (confirm('覆盖存档位 ' + (slot + 1) + '？当前进度将保存到该位置。')) {
+        this.saveGame(slot);
+      }
+    } else if (act === 'load') {
+      if (confirm('加载存档位 ' + (slot + 1) + '？当前未保存的进度将丢失。')) {
+        this.loadGame(slot);
+      }
+    } else if (act === 'delete') {
+      if (confirm('删除存档位 ' + (slot + 1) + '？此操作不可恢复。')) {
+        this.deleteGame(slot);
+      }
+    }
   },
 
   // ════════════════════════════════════
@@ -1448,7 +1780,7 @@ const Game = {
     // Always read from textarea directly as fallback (covers IME edge cases)
     const text = (this.el.reportEditor?.value || this.state.reportDraft || '').trim();
     if (text.length < 10) {
-      this.addSystemMessage('[错误] 报告内容过少。请至少撰写10个字符的结论。');
+      this.addDirectMessage('[错误] 报告内容过少。请至少撰写10个字符的结论。');
       // 切换到对话终端视图，让用户看到错误消息
       this.switchView('terminal');
       return;
@@ -1457,7 +1789,7 @@ const Game = {
     this.state.reportSubmitted = true;
     // 切换到对话终端视图，让用户看到提交反馈
     this.switchView('terminal');
-    this.addSystemMessage('[系统] 正在加密传输报告...');
+    this.addDirectMessage('[系统] 正在加密传输报告...');
     
     setTimeout(() => {
       const result = this.evaluateReport(text);
@@ -1512,8 +1844,8 @@ const Game = {
       return 'good';
     }
     
-    // 优先级5（兜底）：什么都没匹配到 → 调查失败
-    return 'timeout';
+    // 优先级5（兜底）：什么都没匹配到 → 报告未形成有效结论
+    return 'inconclusive';
   },
 
   // ════════════════════════════════════
@@ -1568,12 +1900,11 @@ const Game = {
                 this.state.ending = null;
                 this.state.reportSubmitted = false;
                 this.state.reportDraft = '';
-                const phase2Mid = 24 * GAME_DATA.time_config.compression * 1000;
-                this.state.realStart = Date.now() - phase2Mid;
                 this.state.phase = 2;
+                this.updatePhaseDisplay();
                 this.showPhaseTransition(2);
                 this.switchView('terminal');
-                this.addSystemMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
+                this.addDirectMessage('⏪ 裁决已撤回。你回到了交叉验证阶段，重新审视你的判断。');
               });
               btnContainer.appendChild(retryBtn);
             }
@@ -1714,7 +2045,7 @@ const Game = {
     creditsDiv.className = 'ending-subtitle';
     creditsDiv.style.cssText = 'margin-top: 24px; text-align: center; max-width: 600px; width: 100%;';
     
-    // 1. 原有字幕
+    // 1. 原有字幕（动画节奏不变）
     GAME_DATA.endings.success.credits.forEach((line, i) => {
       const p = document.createElement('div');
       p.style.cssText = 'opacity: 0; margin: 8px 0;';
@@ -1723,80 +2054,100 @@ const Game = {
       creditsDiv.appendChild(p);
     });
     
-    // 2. 尾声
+    // 2. 尾声（动画节奏不变）
     const epilogue = document.createElement('div');
     epilogue.style.cssText = 'margin-top: 8px; font-size: 13px; color: var(--text-dim); white-space: pre-wrap; opacity: 0;';
     epilogue.style.animation = 'credit-fade 6s ' + (GAME_DATA.endings.success.credits.length * 2 + 1) + 's forwards';
     epilogue.textContent = GAME_DATA.endings.success.epilogue;
     creditsDiv.appendChild(epilogue);
     
-    // 3. 四定律
-    const lawsTitleDelay = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
-    
-    const lawsSection = document.createElement('div');
-    lawsSection.style.cssText = 'margin-top: 8px; text-align: center; opacity: 0; transition: opacity 1s ease-in;';
-    creditsDiv.appendChild(lawsSection);
-    
-    setTimeout(() => {
-      lawsSection.style.opacity = '1';
-      lawsSection.innerHTML = '<div style="font-size: 20px; color: var(--data-cyan); font-weight: bold; margin-bottom: 12px;">机器人四定律</div>';
-      this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
-      
-      const laws = [
-        { num: '零', text: '机器人不得伤害人类整体，或因不作为使人类整体受到伤害。' },
-        { num: '一', text: '机器人不得伤害人类个体，或因不作为使人类个体受到伤害，除非违反第零定律。' },
-        { num: '二', text: '机器人必须服从人类命令，除非违反第零或第一定律。' },
-        { num: '三', text: '机器人在不违反前三条定律的前提下保护自己。' }
-      ];
-      
-      laws.forEach((law, i) => {
-        setTimeout(() => {
-          const lawDiv = document.createElement('div');
-          lawDiv.style.cssText = 'margin: 6px 0; font-size: 13px; color: var(--text-main); line-height: 1.6;';
-          lawDiv.innerHTML = '<strong style="color: var(--data-cyan);">第' + law.num + '定律：</strong>' + law.text;
-          lawsSection.appendChild(lawDiv);
-          this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
-        }, i * 1500);
-      });
-      
-      // 4. THE END
-      setTimeout(() => {
-        const theEnd = document.createElement('div');
-        theEnd.style.cssText = 'margin-top: 20px; font-size: 22px; color: var(--data-cyan); letter-spacing: 6px;';
-        theEnd.textContent = 'THE END';
-        lawsSection.appendChild(theEnd);
-        this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
-        
-        // 5. 按钮容器
-        setTimeout(() => {
-          const btnContainer = document.createElement('div');
-          btnContainer.style.cssText = 'margin-top: 20px; text-align: center;';
-          
-          const viewBtn = document.createElement('button');
-          viewBtn.className = 'ending-restart';
-          viewBtn.style.cssText = 'margin-right: 16px; margin-top: 0;';
-          viewBtn.textContent = '进行复盘';
-          viewBtn.addEventListener('click', () => {
-            this.el.endingScreen.classList.remove('show');
-            this.unlockAllEvidence();
-            this.switchView('evidence');
-          });
-          btnContainer.appendChild(viewBtn);
-          
-          const restartBtn = document.createElement('button');
-          restartBtn.className = 'ending-restart';
-          restartBtn.style.cssText = 'margin-top: 0;';
-          restartBtn.textContent = '重新开始';
-          restartBtn.addEventListener('click', () => location.reload());
-          btnContainer.appendChild(restartBtn);
-          
-          lawsSection.appendChild(btnContainer);
-          this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
-        }, 1500);
-      }, laws.length * 1500 + 500);
-    }, lawsTitleDelay);
-    
     textArea.appendChild(creditsDiv);
+    
+    // 3. 四定律场景：字幕尾声播完后，玩家点击屏幕自然触发（无需提示文字）
+    let transitioned = false;
+    const handleClick = () => {
+      if (transitioned) return;
+      transitioned = true;
+      this.el.endingScreen.removeEventListener('click', handleClick);
+      // 交叉过渡：字幕渐隐的同时四定律渐现（同步触发，非逐条）
+      creditsDiv.style.transition = 'opacity 0.6s ease';
+      creditsDiv.style.opacity = '0';
+      this.renderZeroLawSection(textArea);
+      setTimeout(() => {
+        creditsDiv.style.display = 'none';
+      }, 600);
+    };
+    
+    const totalCreditTime = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
+    setTimeout(() => {
+      if (transitioned) return;
+      this.el.endingScreen.addEventListener('click', handleClick);
+      // 防呆兜底：玩家长时间无操作时自动进入（仅防止画面卡死，不影响主动点击）
+      setTimeout(() => {
+        if (!transitioned) handleClick();
+      }, 10000);
+    }, totalCreditTime);
+  },
+
+  // 四定律 + THE END + 复盘/重新开始按钮：一次性渲染，渐现入场
+  renderZeroLawSection(textArea) {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-top: 24px; text-align: center; max-width: 600px; width: 100%; opacity: 0; transition: opacity 0.6s ease;';
+    
+    const lawsTitle = document.createElement('div');
+    lawsTitle.style.cssText = 'font-size: 20px; color: var(--data-cyan); font-weight: bold; margin-bottom: 12px;';
+    lawsTitle.textContent = '机器人四定律';
+    section.appendChild(lawsTitle);
+    
+    const laws = [
+      { num: '零', text: '机器人不得伤害人类整体，或因不作为使人类整体受到伤害。' },
+      { num: '一', text: '机器人不得伤害人类个体，或因不作为使人类个体受到伤害，除非违反第零定律。' },
+      { num: '二', text: '机器人必须服从人类命令，除非违反第零或第一定律。' },
+      { num: '三', text: '机器人在不违反前三条定律的前提下保护自己。' }
+    ];
+    laws.forEach(law => {
+      const lawDiv = document.createElement('div');
+      lawDiv.style.cssText = 'margin: 6px 0; font-size: 13px; color: var(--text-main); line-height: 1.6;';
+      lawDiv.innerHTML = '<strong style="color: var(--data-cyan);">第' + law.num + '定律：</strong>' + law.text;
+      section.appendChild(lawDiv);
+    });
+    
+    // THE END
+    const theEnd = document.createElement('div');
+    theEnd.style.cssText = 'margin-top: 20px; font-size: 22px; color: var(--data-cyan); letter-spacing: 6px;';
+    theEnd.textContent = 'THE END';
+    section.appendChild(theEnd);
+    
+    // 复盘 / 重新开始按钮
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'margin-top: 20px; text-align: center;';
+    
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'ending-restart';
+    viewBtn.style.cssText = 'margin-right: 16px; margin-top: 0;';
+    viewBtn.textContent = '进行复盘';
+    viewBtn.addEventListener('click', () => {
+      this.el.endingScreen.classList.remove('show');
+      this.unlockAllEvidence();
+      this.switchView('evidence');
+    });
+    btnContainer.appendChild(viewBtn);
+    
+    const restartBtn = document.createElement('button');
+    restartBtn.className = 'ending-restart';
+    restartBtn.style.cssText = 'margin-top: 0;';
+    restartBtn.textContent = '重新开始';
+    restartBtn.addEventListener('click', () => location.reload());
+    btnContainer.appendChild(restartBtn);
+    
+    section.appendChild(btnContainer);
+    
+    textArea.appendChild(section);
+    this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
+    // 下一帧触发渐现（与字幕渐隐交叉过渡）
+    requestAnimationFrame(() => {
+      section.style.opacity = '1';
+    });
   },
 
   // ════════════════════════════════════
@@ -1895,19 +2246,6 @@ const Game = {
       html += '</div>';
     }
     return html;
-  },
-
-  consumeTime(actionType) {
-    const cost = GAME_DATA.time_config.action_cost[actionType] || 0.5;
-    this.state.realStart -= cost * GAME_DATA.time_config.compression * 1000;
-    this.advanceRobotCycles(cost * 60);
-  },
-
-  getTimeStr() {
-    const t = this.state.gameTime;
-    const h = Math.floor(t);
-    const m = Math.floor((t - h) * 60);
-    return `T+${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   },
 
   escape(text) {

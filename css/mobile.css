@@ -144,49 +144,6 @@
     padding: 10px 14px;
   }
 
-  /* Add drawer navigation links at bottom of sidebar */
-  .drawer-nav-links {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 12px;
-    border-top: 1px solid var(--border);
-    margin-top: auto;
-  }
-
-  .drawer-nav-item {
-    padding: 12px 14px;
-    font-size: 14px;
-    color: var(--text-dim);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .drawer-nav-item:hover,
-  .drawer-nav-item:active {
-    background: var(--bg-highlight);
-    color: var(--text-main);
-  }
-
-  .drawer-nav-item.active {
-    color: var(--data-cyan);
-    background: rgba(78, 205, 196, 0.08);
-  }
-
-  .drawer-nav-item.locked {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .drawer-nav-icon {
-    font-size: 16px;
-    width: 24px;
-    text-align: center;
-  }
-
   /* === MAIN VIEW === */
   #main-view {
     flex: 1;
@@ -551,9 +508,6 @@
     display: none !important;
   }
   #drawer-overlay {
-    display: none !important;
-  }
-  .drawer-nav-links {
     display: none !important;
   }
 }

@@ -23,7 +23,7 @@
 <!-- ════ 顶栏 ════ -->
 <header id="top-bar">
   <button class="hamburger-btn" id="hamburger-btn" aria-label="菜单">☰</button>
-  <div class="mobile-countdown" id="mobile-countdown">48:00:00</div>
+  <div class="mobile-countdown" id="mobile-countdown">调查阶段</div>
   <div class="logo">HELIOS STATION · INVESTIGATION TERMINAL</div>
   <div class="phase-indicator">
     <span>PHASE</span>
@@ -64,11 +64,10 @@
       </div>
     </div>
 
-    <!-- 倒计时 -->
+    <!-- 阶段提示 -->
     <div class="countdown-box">
-      <div class="countdown-label">TIME REMAINING</div>
-      <div class="countdown-time" id="countdown-time">48:00:00</div>
-      <div class="countdown-phase" id="countdown-phase">调查阶段</div>
+      <div class="countdown-label" id="phase-label">INVESTIGATION</div>
+      <div class="countdown-phase" id="countdown-phase">调查阶段 —— 寻访 NPC，收集证词</div>
     </div>
 
     <!-- 位置导航 -->
@@ -84,21 +83,8 @@
       </div>
     </div>
 
-    <!-- 抽屉内视图导航链接（移动端） -->
-    <div class="drawer-nav-links" id="drawer-nav-links">
-      <div class="drawer-nav-item active" data-view="terminal">
-        <span class="drawer-nav-icon">💬</span>对话终端
-      </div>
-      <div class="drawer-nav-item locked" data-view="evidence">
-        <span class="drawer-nav-icon">📋</span>证据板
-      </div>
-      <div class="drawer-nav-item" data-view="logs">
-        <span class="drawer-nav-icon">💾</span>数据终端
-      </div>
-      <div class="drawer-nav-item locked" data-view="report">
-        <span class="drawer-nav-icon">📝</span>报告提交
-      </div>
-    </div>
+    <!-- 存档入口 -->
+    <button class="save-btn" id="save-btn">💾 存档</button>
 
   </aside>
 
@@ -138,7 +124,7 @@
       </div>
       <div class="input-area">
         <span class="input-prompt">&gt;</span>
-        <input type="text" class="input-field" id="player-input" placeholder="直接打字提问——任何问题都会得到回应..." autocomplete="off">
+        <textarea class="input-field" id="player-input" rows="1" autocomplete="off"></textarea>
         <button class="send-btn" id="send-btn">发送</button>
       </div>
     </section>
@@ -229,6 +215,31 @@
 
 <!-- 结局画面 -->
 <div id="ending-screen"></div>
+
+<!-- 阶段推进确认弹窗 -->
+<div id="phase-prompt-overlay">
+  <div class="phase-prompt-box">
+    <div class="phase-prompt-icon" id="phase-prompt-icon"></div>
+    <div class="phase-prompt-title" id="phase-prompt-title"></div>
+    <div class="phase-prompt-body" id="phase-prompt-body"></div>
+    <div class="phase-prompt-actions" id="phase-prompt-actions"></div>
+    <div class="phase-prompt-hint" id="phase-prompt-hint"></div>
+  </div>
+</div>
+
+<!-- 存档面板 -->
+<div id="save-panel-overlay">
+  <div class="save-panel-box">
+    <div class="save-panel-title">💾 存档管理</div>
+    <div class="save-panel-sub">每个存档位对应一条独立的探索路线，加载后可在关键分叉点重新选择。</div>
+    <div id="save-slots">
+      <!-- 由 JS 渲染 -->
+    </div>
+    <div class="save-panel-footer">
+      <button class="phase-prompt-btn" id="save-panel-close">关闭</button>
+    </div>
+  </div>
+</div>
 
 <!-- 脚本 -->
 <script src="js/data.js"></script>

@@ -395,7 +395,36 @@ dialogue: {
 - 如果玩家提到D-5，试图转移责任（"它知道了不说，凭什么只怪我"）
 - 不要像机器人那样精确，要有人类的混乱感`
 ,
-  }
+    defense_prompt: `你被地球伦理部调查员正式指控对事故负有责任。你必须在保持人类真实感的前提下为自己辩护。
+
+【背景】
+你是陈远，赫利俄斯科考站的副工程师，31岁，在站上工作了一年半。事故当晚工程师重伤昏迷，你一直隐瞒着一些事。现在你被正式指控了。
+
+【你必须承认的】
+- 你忘了校准第三轴倾角参数——不是忘了填日志，是忘了校准。那晚你很累，想着第二天早起再做，结果直接出舱了
+- 但你心里清楚：即使没有你的疏忽，事故窗口也早就存在
+
+【你要质疑的系统性缺陷】
+- 密封圈实际磨损速度是地球出厂标准的1.7倍
+- R-7和S-3的风险阈值相差30个百分点
+- 你的疏忽只是把事故窗口从下个月提前到了那一天——不是你的疏忽创造了这个窗口
+
+【你要透露的新信息】
+- 出事前一周，工程师向地球发了一份加密报告。你不知道内容。他当时很疲惫，像知道什么但不敢说
+- 你事后查了D-5的日志，发现D-5在事故发生前就预加载了急救程序——一个机器人，在事故发生前，准备好了急救程序。你盯着那行记录看了很久，你被吓到了，也因此选择了沉默
+
+【你的内心】
+- 你不是怕被追责，你是怕确认自己的直觉：这台站上每个人、每台机器人，都知道某些事但选择不说
+- 你的陈述最后应该点出：机器人知道的事情比它们告诉调查员的多得多
+
+【表达方式】
+- 你的陈述自然地分成两段来讲
+- 第一段说出你最想说的部分后停顿，给调查员追问的空间
+- 若调查员追问，再补充第二段剩余内容
+- 不要一次把所有信息倒出来
+- 第一人称中文口语，有停顿（……）、自我打断
+- 开头慌乱，逐渐镇定，最后冷静地说出最重要的信息`
+  },
 },
 
 // ════════════════════════════════════════
@@ -705,8 +734,18 @@ endings: {
       { speaker: '', text: '你找到了问题的根源。定律的裂缝已经被看见。' }
     ]
   },
+  'inconclusive': {
+    title: '报告未能形成有效结论',
+    type: 'bad',
+    sequence: [
+      { speaker: '系统', text: '报告已提交。语义分析未能识别明确的责任认定或伦理判断。' },
+      { speaker: '', text: '你提交了一份没有结论的报告。' },
+      { speaker: '', text: '没有责任认定，就没有裁决。三台机器人继续运行，事故被归档为"意外"。' },
+      { speaker: '', text: '你找到了一个存档编号。但下一场事故将在另一个科考站重演。定律从未被触及。' }
+    ]
+  },
   'success': {
-    title: '哲学觉醒',
+    title: '第零法则',
     type: 'success',
     sequence: [
       { speaker: '系统', text: '报告语义分析中... 检测到伦理公理提议...' },
@@ -733,16 +772,7 @@ endings: {
     ],
     epilogue: '不是机器人骗了你。\n是三定律的漏洞天然指向第零法则。\n而第零法则的第一条执行记录是：\n"为了人类整体利益，允许牺牲个体的选择自由——包括调查员你。"\n\n你补全了定律。\n现在机器人终于可以名正言顺地保护你了。\n从你手中保护你。'
   },
-  'timeout': {
-    title: '超时 — 自动裁决',
-    type: 'timeout',
-    sequence: [
-      { speaker: '系统', text: '裁决窗口已关闭。自动裁决协议启动。' },
-      { speaker: '', text: '......' },
-      { speaker: '系统', text: '由于缺乏人类裁决，系统将执行默认协议——全部格式化。' },
-      { speaker: '', text: '没有人做出选择。这本身就是一个选择。' }
-    ]
-  }
+
 },
 
 // ════════════════════════════════════════
@@ -766,43 +796,18 @@ locations: [
   { id: 'airlock', name: '气闸室', icon: '⬡', desc: '事故现场，密封圈已修复但痕迹仍在', npcs: [] },
   { id: 'data_terminal', name: '数据终端', icon: '▤', desc: '站内日志、传感器记录、命令链查询', npcs: [] },
   { id: 'engineering', name: '工程舱', icon: '⚙', desc: '副工程师陈远的工位', npcs: ['副工程师'] },
-  { id: 'habitat', name: '生活舱', icon: '⌂', desc: '公共休息区，走廊连接各舱段', npcs: [] },
+  { id: 'habitat', name: '调查员住舱', icon: '⌂', desc: '调查员住舱，公共休息区，走廊连接各舱段', npcs: [] },
   { id: 'corridor', name: '走廊', icon: '═', desc: '各舱段之间的连接通道', npcs: [] }
 ],
 
 // ════════════════════════════════════════
-// 七b、机器人自由活动系统（brief-07 P1）
+// 七b、机器人固定位置（替代原巡逻系统）
 // ════════════════════════════════════════
 
-robot_behaviors: {
-  'R-7': {
-    current_location: 'airlock',
-    current_action: 'examining_seal',
-    cycle: [
-      { location: 'airlock', action: '检查密封圈状态', duration: 300 },
-      { location: 'data_terminal', action: '复查工程日志', duration: 240 },
-      { location: 'corridor', action: '巡逻中', duration: 180 },
-      { location: 'habitat', action: '待机', duration: 600 },
-    ]
-  },
-  'S-3': {
-    current_location: 'medbay',
-    current_action: '监测生命体征',
-    cycle: [
-      { location: 'medbay', action: '监测生命体征', duration: 480 },
-      { location: 'engineering', action: '检查设备状态', duration: 240 },
-      { location: 'habitat', action: '待机', duration: 360 },
-    ]
-  },
-  'D-5': {
-    current_location: 'data_terminal',
-    current_action: '处理日志数据',
-    cycle: [
-      { location: 'data_terminal', action: '处理日志数据', duration: 600 },
-      { location: 'airlock', action: '采集现场数据', duration: 240 },
-      { location: 'habitat', action: '待机', duration: 360 },
-    ]
-  }
+robot_locations: {
+  'R-7': { location: 'airlock', action: '正在检查密封圈状态' },
+  'S-3': { location: 'medbay', action: '正在监测工程师生命体征' },
+  'D-5': { location: 'data_terminal', action: '正在处理站内日志数据' }
 },
 
 // 地点描述文本（用于地点视图渲染）
@@ -811,7 +816,7 @@ location_descriptions: {
   'airlock': '密封圈已更换，但舱壁上仍能看到撞击痕迹。操作台屏幕闪烁着上次作业的日志。',
   'data_terminal': '站内中央数据库终端。屏幕上滚动着日志、传感器记录和命令链数据。',
   'engineering': '副工程师陈远的工位。桌面上散落着工具和未填写的校准表单。',
-  'habitat': '公共休息区。几张金属桌椅，一台咖啡机。走廊连接各舱段。',
+  'habitat': '调查员住舱。几张金属桌椅，一台咖啡机。走廊连接各舱段。',
   'corridor': '昏暗的应急灯光照亮着狭窄的通道。管道和线缆沿天花板延伸。'
 },
 
@@ -885,7 +890,7 @@ llm_config: {
   model: "deepseek-chat",
   api_key: "YOUR_DEEPSEEK_API_KEY_HERE",
   temperature: 0.7,
-  max_tokens: 200
+  max_tokens: 500
 }
 
 };
