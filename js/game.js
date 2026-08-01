@@ -274,6 +274,13 @@ const Game = {
         this.handlePlayerInput();
       }
     });
+    // 键盘弹出/收起：隐藏底部导航，让输入区贴键盘（聊天 App 标准行为）
+    this.el.playerInput.addEventListener('focus', () => {
+      document.body.classList.add('keyboard-open');
+    });
+    this.el.playerInput.addEventListener('blur', () => {
+      document.body.classList.remove('keyboard-open');
+    });
 
     // Report editor
     if (this.el.reportEditor) {

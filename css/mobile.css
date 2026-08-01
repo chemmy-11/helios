@@ -97,6 +97,14 @@
     height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h) - var(--status-bar-h, 0px));
   }
 
+  /* 键盘弹出：隐藏底部导航，输入区直接贴键盘 */
+  body.keyboard-open #main-layout {
+    height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
+  }
+  body.keyboard-open .mobile-bottom-nav {
+    display: none !important;
+  }
+
   /* === SIDEBAR → DRAWER === */
   #sidebar {
     position: fixed;
