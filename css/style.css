@@ -70,8 +70,8 @@ body {
 
 /* === TOP BAR === */
 #top-bar {
-  height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
-  padding-top: env(safe-area-inset-top, 0px);
+  height: calc(var(--topbar-h) + var(--status-bar-h, 0px));
+  padding-top: var(--status-bar-h, 0px);
   padding-left: 16px;
   padding-right: 16px;
   background: var(--bg-panel);
@@ -156,7 +156,7 @@ body {
 /* === MAIN LAYOUT === */
 #main-layout {
   display: flex;
-  height: calc(100vh - var(--topbar-h) - env(safe-area-inset-top, 0px));
+  height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
 }
 
 /* === SIDEBAR === */

@@ -109,7 +109,7 @@
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border-right: 1px solid var(--border);
     overflow-y: auto;
-    padding-top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+    padding-top: calc(var(--topbar-h) + var(--status-bar-h, 0px));
     /* Override desktop flex props */
     flex-shrink: unset;
   }
