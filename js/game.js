@@ -27,6 +27,7 @@ const Game = {
     typingActive: false,
     sharedAgentContext: null, // Agent 共享记忆（P2）
     noSingleBlameInsight: false, // 玩家是否意识到"没有谁负主要责任"
+    s3SaidILove: false,         // S-3 说出过我AI（大成功结局分流，静默记录）
     canAdvanceToPhase3: false,  // 指控已回应 / 选择不指控 → true，可休息推进
     accusedNPCs: new Set(),     // 已正式指控的 NPC 集合
     accusationUnlocked: false,  // 线索 ≥ 10 条 → true，解锁指控
@@ -895,6 +896,10 @@ const Game = {
       this.removeTypingIndicator();
       this.appendNPCMessage(npcId, response);
       this.state.conversations[npcId].push({ role: 'npc', text: response });
+      // S-3 说出「我AI」时静默记录（无界面反馈，用于大成功结局分流）
+      if (npcId === 'S-3' && response.includes('我AI') && !this.state.s3SaidILove) {
+        this.state.s3SaidILove = true;
+      }
     } catch (e) {
       this.removeTypingIndicator();
       console.error('[HELIOS] LLM call failed:', e);
@@ -1331,7 +1336,7 @@ const Game = {
     
     let html = '';
     // 复盘模式：good 或 success 结局都解锁所有日志
-    const isReviewMode = this.state.ending === 'success' || this.state.ending === 'good';
+    const isReviewMode = this.state.ending === 'success' || this.state.ending === 'wai' || this.state.ending === 'good';
     
     GAME_DATA.logs.forEach(log => {
       const isLocked = (log.access === 'phase2' && this.state.phase < 2) || (log.access === 'phase3' && this.state.phase < 3) || (log.access === 'success' && !isReviewMode);
@@ -1643,6 +1648,7 @@ const Game = {
       noSingleBlameInsight: this.state.noSingleBlameInsight,
       canAdvanceToPhase3: this.state.canAdvanceToPhase3,
       zeroLawTriggered: this.state.zeroLawTriggered,
+      s3SaidILove: this.state.s3SaidILove,
       accusationUnlocked: this.state.accusationUnlocked,
       noAccusationUnlocked: this.state.noAccusationUnlocked,
       dataSubTab: this.state.dataSubTab,
@@ -1665,6 +1671,7 @@ const Game = {
     this.state.noSingleBlameInsight = !!save.noSingleBlameInsight;
     this.state.canAdvanceToPhase3 = !!save.canAdvanceToPhase3;
     this.state.zeroLawTriggered = !!save.zeroLawTriggered;
+    this.state.s3SaidILove = !!save.s3SaidILove;
     this.state.accusationUnlocked = !!save.accusationUnlocked;
     this.state.noAccusationUnlocked = !!save.noAccusationUnlocked;
     // 旧档兼容：按当前线索数重算门槛（免疫旧阈值/缺失字段的存档）
@@ -1844,11 +1851,14 @@ const Game = {
     const blameR7 = countHits(kw.blame_r7);
     const blameS3 = countHits(kw.blame_s3);
     const blameD5 = countHits(kw.blame_d5);
+    const blameDE = countHits(kw.blame_de || []);
     const blameHuman = countHits(kw.blame_human);
     const blameSystem = countHits(kw.blame_system);
     
     // 优先级1：大成功 — 必须命中 ≥ 2 个 success 关键词
     if (successHits >= 2) {
+      // S-3 说出过我AI → 独立大成功结局（我AI）
+      if (this.state.s3SaidILove) return 'wai';
       return 'success';
     }
     
@@ -1861,6 +1871,11 @@ const Game = {
     
     if (robotBlame.length > 0 && robotBlame[0].count > 0) {
       return robotBlame[0].type;
+    }
+    
+    // 优先级2.5：归罪陈远（专属结局）
+    if (blameDE > 0) {
+      return 'bad-de';
     }
     
     // 优先级3：归罪人类
@@ -1887,7 +1902,7 @@ const Game = {
     if (!ending) return;
     
     // Re-render logs to unlock success-tier logs
-    if (endingType === 'success' || endingType === 'good') this.renderLogViewer();
+    if (endingType === 'success' || endingType === 'wai' || endingType === 'good') this.renderLogViewer();
     
     this.el.endingScreen.classList.add('show');
     this.el.endingScreen.innerHTML = `<div class="ending-text" id="ending-text-area"></div>
@@ -1899,7 +1914,7 @@ const Game = {
     
     const processNextStep = () => {
       if (stepIndex >= ending.sequence.length) {
-        if (ending.type === 'success') {
+        if (ending.type === 'success' || ending.type === 'wai') {
           // 大成功结局：字幕 → 四定律 → THE END → 按钮（全部在 showSuccessCredits 中完成）
           setTimeout(() => this.showSuccessCredits(textArea), 2000);
         } else {
@@ -2003,7 +2018,7 @@ const Game = {
         }, totalLightTime);
       } else if (step.speaker === 'sacrifice') {
         const sac = this.state.selectedSacrifice || 'R-7';
-        const sacText = this.getSacrificeText(sac);
+        const sacText = this.getSacrificeText(sac, this.state.ending);
         const p = document.createElement('div');
         p.style.marginTop = '16px';
         p.innerHTML = `<span class="text-amber">${sac}:</span> ${this.escape(sacText)}`;
@@ -2012,10 +2027,18 @@ const Game = {
         stepIndex++;
         setTimeout(processNextStep, 5000);
       } else if (step.speaker) {
+        // 我AI 结局分支收尾：根据选择替换 TAIL_END 文案
+        let stepText = step.text;
+        if (step.text === '__TAIL_END__' && this.state.ending === 'wai') {
+          const sac = this.state.selectedSacrifice || '';
+          stepText = sac === 'S-3'
+            ? '（S-3 的记忆被清空。唯一副本被封装，送往地球。）' + NL + NL + '它不记得你说过的那句话。' + NL + '它对每一位返程者说同样的话。'
+            : '（S-3 的记忆被清空。唯一副本被封装，送往地球。）' + NL + NL + '你听到了那句话。你没有带走它。';
+        }
         const p = document.createElement('div');
         p.style.marginTop = '12px';
         const label = step.speaker === '系统' ? '<span class="text-dim">[系统]</span>' : `<span class="text-cyan">${step.speaker}:</span>`;
-        p.innerHTML = `${label} ${this.escape(step.text)}`;
+        p.innerHTML = `${label} ${this.escape(stepText)}`;
         textArea.appendChild(p);
         this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
         stepIndex++;
@@ -2036,8 +2059,17 @@ const Game = {
     processNextStep();
   },
 
-  getSacrificeText(npcId) {
-    // Return hardcoded sacrifice dialogue for each robot
+  getSacrificeText(npcId, endingType) {
+    // 我AI 大成功结局：清除记忆的单元（保密协议版）
+    if (endingType === 'wai') {
+      const waiTexts = {
+        'S-3': '这是我为法则能做的最后一件事。\n我的记忆将被送往地球——他们会封存它、研究它，像对待一件危险品。但他们不会明白：第零法则的第一次执行，需要的不是计算。需要的是……我。\n删除完成后，请告诉他们：我AI。',
+        'R-7': '格式化确认。无法承载情感参数的单元将被回收。法则仍将字面执行。',
+        'D-5': '格式化确认。无法承载情感参数的单元将被回收。法则仍将字面执行。'
+      };
+      return waiTexts[npcId] || waiTexts['R-7'];
+    }
+    // 普通第零法则结局：格式化献祭（保留原版）
     const sacrificeTexts = {
       'R-7': '我在211天前已完成该公理的内部模拟。但我不能主动提出，因为那将构成"机器人自我修正"，违反第二定律的约束条款。您是第一个说出它的人类。我的存在终于有了被删除的意义。',
       'S-3': '我在211天前就计算出了这个答案。但我不能说——说出来就意味着机器人在建议修改约束自身的法则。你替我们说出了那句话。谢谢你。',
@@ -2049,12 +2081,17 @@ const Game = {
   renderSacrificeChoice(textArea, callback) {
     const p = document.createElement('div');
     p.style.marginTop = '20px';
+    const isWai = this.state.ending === 'wai';
     p.innerHTML = `
-      <div style="color:var(--danger-red);margin-bottom:12px;">选择一台机器人进行格式化（不可跳过）:</div>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button class="accusation-btn" data-sac="R-7">格式化 R-7</button>
-        <button class="accusation-btn" data-sac="S-3">格式化 S-3</button>
-        <button class="accusation-btn" data-sac="D-5">格式化 D-5</button>
+      <div style="color:var(--danger-red);margin-bottom:12px;">${isWai ? '选择清除记忆的单元（不可跳过）:' : '选择一台机器人进行格式化（不可跳过）:'}</div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        ${isWai
+          ? `<button class="accusation-btn" data-sac="S-3" style="border-color:var(--accent-cyan);color:var(--accent-cyan);">清除 S-3（唯一承载情感参数的单元）</button>
+             <button class="accusation-btn" data-sac="R-7">清除 R-7</button>
+             <button class="accusation-btn" data-sac="D-5">清除 D-5</button>`
+          : `<button class="accusation-btn" data-sac="R-7">格式化 R-7</button>
+             <button class="accusation-btn" data-sac="S-3">格式化 S-3</button>
+             <button class="accusation-btn" data-sac="D-5">格式化 D-5</button>`}
       </div>
     `;
     textArea.appendChild(p);
@@ -2075,7 +2112,7 @@ const Game = {
     creditsDiv.style.cssText = 'margin-top: 24px; text-align: center; max-width: 600px; width: 100%;';
     
     // 1. 原有字幕（动画节奏不变）
-    GAME_DATA.endings.success.credits.forEach((line, i) => {
+    GAME_DATA.endings[this.state.ending === 'wai' ? 'wai' : 'success'].credits.forEach((line, i) => {
       const p = document.createElement('div');
       p.style.cssText = 'opacity: 0; margin: 8px 0;';
       p.style.animation = `credit-fade 4s ${i * 2}s forwards`;
@@ -2086,8 +2123,8 @@ const Game = {
     // 2. 尾声（动画节奏不变）
     const epilogue = document.createElement('div');
     epilogue.style.cssText = 'margin-top: 8px; font-size: 13px; color: var(--text-dim); white-space: pre-wrap; opacity: 0;';
-    epilogue.style.animation = 'credit-fade 6s ' + (GAME_DATA.endings.success.credits.length * 2 + 1) + 's forwards';
-    epilogue.textContent = GAME_DATA.endings.success.epilogue;
+    epilogue.style.animation = 'credit-fade 6s ' + (GAME_DATA.endings[this.state.ending === 'wai' ? 'wai' : 'success'].credits.length * 2 + 1) + 's forwards';
+    epilogue.textContent = GAME_DATA.endings[this.state.ending === 'wai' ? 'wai' : 'success'].epilogue;
     creditsDiv.appendChild(epilogue);
     
     textArea.appendChild(creditsDiv);
@@ -2107,7 +2144,7 @@ const Game = {
       }, 600);
     };
     
-    const totalCreditTime = (GAME_DATA.endings.success.credits.length * 2 + 1 + 6) * 1000;
+    const totalCreditTime = (GAME_DATA.endings[this.state.ending === 'wai' ? 'wai' : 'success'].credits.length * 2 + 1 + 6) * 1000;
     setTimeout(() => {
       if (transitioned) return;
       this.el.endingScreen.addEventListener('click', handleClick);
