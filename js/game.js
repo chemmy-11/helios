@@ -55,7 +55,52 @@ const Game = {
     this.showPhaseTransition(1);
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
     this.setupExitGuard();
+    // 启动 4 秒后静默检查更新（仅原生 App）
+    setTimeout(() => this.checkForUpdates(false), 4000);
     console.log('[HELIOS] Game initialized.');
+  },
+
+  // ════════════════════════════════════
+  // 二·六、在线更新（@capgo/capacitor-updater + GitHub Release）
+  // ════════════════════════════════════
+
+  // 更新清单固定地址（仓库 master 分支的 update/version.json，raw 直链）
+  UPDATE_MANIFEST_URL: 'https://raw.githubusercontent.com/chemmy-11/helios/master/update/version.json',
+
+  // 检查更新：manual=false 为启动静默检查，manual=true 为玩家主动触发
+  async checkForUpdates(manual) {
+    // 仅原生 App（Capacitor）环境启用；浏览器版直接跳过
+    if (!window.Capacitor || !window.Capacitor.isNativePlatform()) return;
+    try {
+      const resp = await fetch(this.UPDATE_MANIFEST_URL, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const manifest = await resp.json();
+      const local = typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.0.0';
+      if (manifest.version && manifest.version !== local) {
+        this.state.updateManifest = manifest;
+        this.showPhasePrompt('updateAvailable');
+      } else if (manual) {
+        this.addDirectMessage('当前已是最新版本（v' + local + '）。');
+      }
+    } catch (e) {
+      console.error('[HELIOS] 更新检查失败:', e);
+      if (manual) this.addDirectMessage('更新检查失败：无法连接更新服务器。');
+    }
+  },
+
+  // 下载并应用更新包
+  async applyUpdate(manifest) {
+    const Updater = window.Capacitor?.Plugins?.CapacitorUpdater;
+    if (!Updater) return;
+    try {
+      this.addDirectMessage('正在下载更新包...');
+      const bundle = await Updater.download({ url: manifest.url });
+      await Updater.set({ id: bundle.id });
+      this.showPhasePrompt('updateDone');
+    } catch (e) {
+      console.error('[HELIOS] 更新下载失败:', e);
+      this.addDirectMessage('更新下载失败：' + (e.message || '未知错误') + '。请稍后重试。');
+    }
   },
 
   // 游戏是否已有实质进度（用于退出提醒）
@@ -173,6 +218,8 @@ const Game = {
     this.el.savePanelOverlay = document.getElementById('save-panel-overlay');
     this.el.saveSlots = document.getElementById('save-slots');
     this.el.savePanelClose = document.getElementById('save-panel-close');
+    // Update check button
+    this.el.updateBtn = document.getElementById('update-btn');
     this.el.apiKeyInput = document.getElementById('api-key-input');
     this.el.apiKeyModal = document.getElementById('api-key-modal');
     this.el.apiKeyModalInput = document.getElementById('api-key-modal-input');
@@ -291,6 +338,11 @@ const Game = {
     }
     if (this.el.savePanelClose) {
       this.el.savePanelClose.addEventListener('click', () => this.hideSavePanel());
+    }
+
+    // Update check
+    if (this.el.updateBtn) {
+      this.el.updateBtn.addEventListener('click', () => this.checkForUpdates(true));
     }
 
     if (this.el.apiKeyModalInput) {
@@ -1521,6 +1573,44 @@ const Game = {
       actions.appendChild(btnSave);
       actions.appendChild(btnExit);
       actions.appendChild(btnStay);
+    } else if (type === 'updateAvailable') {
+      const manifest = this.state.updateManifest || {};
+      icon.textContent = '🔄';
+      title.textContent = '发现新版本 v' + (manifest.version || '');
+      body.textContent = manifest.changelog || '本次更新包含新的内容与修复。';
+      hint.textContent = '更新包很小，下载后需要重启应用生效。';
+      const btnUpdate = document.createElement('button');
+      btnUpdate.className = 'phase-prompt-btn primary';
+      btnUpdate.textContent = '立即更新';
+      btnUpdate.addEventListener('click', () => {
+        this.hidePhasePrompt();
+        this.applyUpdate(manifest);
+      });
+      const btnLater = document.createElement('button');
+      btnLater.className = 'phase-prompt-btn';
+      btnLater.textContent = '下次再说';
+      btnLater.addEventListener('click', closeWith);
+      actions.appendChild(btnUpdate);
+      actions.appendChild(btnLater);
+    } else if (type === 'updateDone') {
+      icon.textContent = '✅';
+      title.textContent = '更新已下载';
+      body.textContent = '新版本已就绪。重启应用后生效（存档不会丢失）。';
+      hint.textContent = '';
+      const btnReload = document.createElement('button');
+      btnReload.className = 'phase-prompt-btn primary';
+      btnReload.textContent = '立即重启';
+      btnReload.addEventListener('click', () => {
+        this.hidePhasePrompt();
+        const Updater = window.Capacitor?.Plugins?.CapacitorUpdater;
+        if (Updater) Updater.reload();
+      });
+      const btnLater = document.createElement('button');
+      btnLater.className = 'phase-prompt-btn';
+      btnLater.textContent = '稍后再说';
+      btnLater.addEventListener('click', closeWith);
+      actions.appendChild(btnReload);
+      actions.appendChild(btnLater);
     }
 
     overlay.classList.add('show');
