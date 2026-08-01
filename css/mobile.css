@@ -9,6 +9,7 @@
   :root {
     --topbar-h: 44px;
     --bottom-nav-h: 52px;
+    --status-bar-h: 28px;  /* Android 状态栏典型高度，让顶栏内容避开状态栏 */
   }
 
   html, body {
@@ -57,8 +58,8 @@
   /* === TOP BAR === */
   #top-bar {
     gap: 10px;
-    padding: 0 12px;
-    height: var(--topbar-h);
+    padding: var(--status-bar-h, 0px) 12px 0 12px;
+    height: calc(var(--topbar-h) + var(--status-bar-h, 0px));
   }
 
   .logo {
@@ -93,7 +94,7 @@
 
   /* === MAIN LAYOUT === */
   #main-layout {
-    height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h));
+    height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h) - var(--status-bar-h, 0px));
   }
 
   /* === SIDEBAR → DRAWER === */

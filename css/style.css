@@ -25,6 +25,7 @@
 
   /* Sizes */
   --topbar-h: 48px;
+  --status-bar-h: 0px;  /* Android 状态栏占位（移动端在 mobile.css 覆盖为 28px） */
   --sidebar-w: 220px;
   --radius: 4px;
 }
