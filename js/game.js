@@ -72,7 +72,9 @@ const Game = {
     this._kbPad = 0;
     const navH = () => parseInt(getComputedStyle(document.documentElement)
       .getPropertyValue('--bottom-nav-h')) || 0;
-    const shrink = () => Math.max(0, (window.screen.height || window.innerHeight) - window.innerHeight);
+    // screen.height 在 Android WebView 是物理像素，须除 devicePixelRatio 转 CSS 像素再与 innerHeight 比较
+    const screenH = () => (window.screen.height || window.innerHeight) / (window.devicePixelRatio || 1);
+    const shrink = () => Math.max(0, screenH() - window.innerHeight);
     const applyKb = () => {
       this._kbPad = Math.max(0, this._kbNow - navH() - shrink());
       document.documentElement.style.setProperty('--kb-pad', this._kbPad + 'px');
@@ -92,13 +94,14 @@ const Game = {
         ' nav=' + cs.getPropertyValue('--kb-nav').trim() +
         ' kb=' + this._kbNow + ' shrink=' + shrink() +
         ' pad=' + this._kbPad +
-        ' vh=' + window.innerHeight + ' sh=' + window.screen.height;
+        ' vh=' + window.innerHeight + ' sh=' + window.screen.height +
+        ' dpr=' + (window.devicePixelRatio || 1) + ' shCss=' + screenH();
     };
     // 注入调试条 DOM（仅原生环境）
     if (window.Capacitor && window.Capacitor.isNativePlatform()) {
       const bar = document.createElement('div');
       bar.id = 'kb-debug-bar';
-      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;font-size:11px;padding:2px 8px;font-family:monospace;';
+      bar.style.cssText = 'position:fixed;top:calc(var(--status-bar-h, 0px) + 2px);left:0;right:0;z-index:99999;background:#c0392b;color:#fff;font-size:11px;padding:2px 8px;font-family:monospace;';
       document.body.appendChild(bar);
     }
   },
