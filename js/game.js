@@ -65,14 +65,8 @@ const Game = {
 
   // 键盘适配：由 MainActivity 原生 ime insets 监听注入 --kb-height（跨版本可靠，
   // 不依赖 adjustResize/opt-out）。#main-layout padding-bottom 消费该变量撑开底部，
-  // 底部导航横条经 __onKbChange 转发 transform 跟随键盘上移。
+  // 输入区直接贴合键盘上沿；底部导航固定 bottom:0，键盘弹出时被键盘遮挡（v1.4 行为）。
   setupKeyboard() {
-    // 原生层注入 --kb-height（MainActivity ime insets 监听），JS 侧只消费与转发
-    window.__onKbChange = (ime, navBar, kb) => {
-      this._kbNow = kb;
-      if (this._kbFrozen) return; // blur 后冻结 500ms，覆盖 click 合成窗口
-      this._applyNavKb(kb);
-    };
     // 真机调试：控制台 window.__kbDebug() 查看 ime/nav/kb 原始值（验证后移除）
     window.__kbDebug = () => {
       const cs = getComputedStyle(document.documentElement);
@@ -81,12 +75,6 @@ const Game = {
         ' kb=' + cs.getPropertyValue('--kb-height').trim() +
         ' vh=' + window.innerHeight);
     };
-  },
-
-  // 底部导航横条跟随键盘上移（transform，不碰 DOM 流）；键盘收起后落回屏幕底部
-  _applyNavKb(kb) {
-    const nav = this.el.bottomNav;
-    if (nav) nav.style.transform = kb > 0 ? 'translateY(-' + kb + 'px)' : '';
   },
 
   // 状态栏动态校正：根据系统是否让位决定 CSS 占位
@@ -320,22 +308,6 @@ const Game = {
         e.preventDefault();
         this.handlePlayerInput();
       }
-    });
-    // 键盘弹出/收起：底部导航横条 transform 跟随键盘上移（微信式）。
-    // blur 后冻结 500ms 再落底：点击横条时 touchstart 先触发 blur，而 click
-    // 在 touchend 后约 300ms 才合成；冻结窗口覆盖合成期，避免按钮跑掉点击丢失
-    this.el.playerInput.addEventListener('focus', () => {
-      clearTimeout(this._navRestoreTimer);
-      this._kbFrozen = false;
-      this._applyNavKb(this._kbNow || 0);
-    });
-    this.el.playerInput.addEventListener('blur', () => {
-      this._kbFrozen = true;
-      clearTimeout(this._navRestoreTimer);
-      this._navRestoreTimer = setTimeout(() => {
-        this._kbFrozen = false;
-        this._applyNavKb(0);
-      }, 500);
     });
 
     // Report editor

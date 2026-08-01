@@ -93,14 +93,11 @@
   .mobile-countdown.critical { color: var(--danger-red); animation: pulse-fast 0.5s infinite; }
 
   /* === MAIN LAYOUT === */
-  /* 高度不再扣底部导航：导航高度由 #main-layout padding-bottom 恒占位
-     （style.css），键盘弹出时输入区随 padding 上移，始终在横条之上 */
+  /* 键盘弹出：底部导航固定 bottom:0 被键盘遮挡（v1.4 行为），
+     输入区由 style.css 的 --kb-height padding 撑起，直接贴合键盘上沿 */
   #main-layout {
-    height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
+    height: calc(100vh - var(--topbar-h) - var(--bottom-nav-h) - var(--status-bar-h, 0px));
   }
-
-  /* 键盘弹出：底部导航横条由 JS transform 跟随键盘上移（微信式）。
-     保持 fixed bottom:0 原位，不参与 flex 流，避免布局错乱 */
 
   /* === SIDEBAR → DRAWER === */
   #sidebar {
