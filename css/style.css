@@ -158,9 +158,9 @@ body {
 #main-layout {
   display: flex;
   height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
-  /* 键盘弹出：原生 insets 注入 --kb-height；输入区上移量 = kb 减去 height 中
-     已预留的底部导航高度（--bottom-nav-h），贴合键盘上沿；max 保护小键盘场景 */
-  padding-bottom: max(0px, var(--kb-height, 0px) - var(--bottom-nav-h, 0px));
+  /* 键盘弹出：--kb-pad 由 JS 计算（原生 kb - 视口收缩量 - 底部导航预留），
+     输入区直接贴合键盘上沿；max 保护小键盘/未收缩场景 */
+  padding-bottom: var(--kb-pad, 0px);
   transition: padding-bottom 0.15s ease-out;
 }
 

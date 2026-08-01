@@ -64,17 +64,43 @@ const Game = {
   },
 
   // 键盘适配：由 MainActivity 原生 ime insets 监听注入 --kb-height（跨版本可靠，
-  // 不依赖 adjustResize/opt-out）。#main-layout padding-bottom 消费该变量撑开底部，
-  // 输入区直接贴合键盘上沿；底部导航固定 bottom:0，键盘弹出时被键盘遮挡（v1.4 行为）。
+  // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（ime-nav）。
+  // JS 侧补偿：若系统同时收缩了视口（innerHeight 变小，如 adjustResize 实际生效），
+  // 需减去收缩量避免双重偏移（否则缝隙≈键盘高度）；再减去 height 已预留的底部导航高。
   setupKeyboard() {
-    // 真机调试：控制台 window.__kbDebug() 查看 ime/nav/kb 原始值（验证后移除）
+    this._kbNow = 0;
+    this._kbPad = 0;
+    const navH = () => parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue('--bottom-nav-h')) || 0;
+    const shrink = () => Math.max(0, (window.screen.height || window.innerHeight) - window.innerHeight);
+    const applyKb = () => {
+      this._kbPad = Math.max(0, this._kbNow - navH() - shrink());
+      document.documentElement.style.setProperty('--kb-pad', this._kbPad + 'px');
+      if (window.__kbDebug) window.__kbDebug();
+    };
+    window.__onKbChange = (ime, navBar, kb) => {
+      this._kbNow = kb;
+      applyKb();
+    };
+    window.addEventListener('resize', applyKb);
+    // 真机调试（验证后移除）：屏幕顶条显示 ime/nav/kb/shrink/pad 原始值
     window.__kbDebug = () => {
       const cs = getComputedStyle(document.documentElement);
-      console.log('[KB] ime=' + cs.getPropertyValue('--kb-ime').trim() +
+      const bar = document.getElementById('kb-debug-bar');
+      if (!bar) return;
+      bar.textContent = 'ime=' + cs.getPropertyValue('--kb-ime').trim() +
         ' nav=' + cs.getPropertyValue('--kb-nav').trim() +
-        ' kb=' + cs.getPropertyValue('--kb-height').trim() +
-        ' vh=' + window.innerHeight);
+        ' kb=' + this._kbNow + ' shrink=' + shrink() +
+        ' pad=' + this._kbPad +
+        ' vh=' + window.innerHeight + ' sh=' + window.screen.height;
     };
+    // 注入调试条 DOM（仅原生环境）
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+      const bar = document.createElement('div');
+      bar.id = 'kb-debug-bar';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c0392b;color:#fff;font-size:11px;padding:2px 8px;font-family:monospace;';
+      document.body.appendChild(bar);
+    }
   },
 
   // 状态栏动态校正：根据系统是否让位决定 CSS 占位
