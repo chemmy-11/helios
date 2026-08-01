@@ -56,9 +56,23 @@ const Game = {
     this.showPhaseTransition(1);
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
     this.setupExitGuard();
+    this.setupStatusBar();
     // 启动 4 秒后静默检查更新（仅原生 App）
     setTimeout(() => this.checkForUpdates(false), 4000);
     console.log('[HELIOS] Game initialized.');
+  },
+
+  // 状态栏处理：关闭 overlay，让系统把 WebView 内容放到状态栏下方
+  // （Capacitor 在 Android 15 会覆盖 Manifest 的 edge-to-edge 退出，这里用插件 API 主动关闭悬浮）
+  async setupStatusBar() {
+    const SB = window.Capacitor?.Plugins?.StatusBar;
+    if (!SB || !window.Capacitor?.isNativePlatform()) return;
+    try {
+      await SB.setOverlaysWebView({ overlay: false });
+      console.log('[HELIOS] 状态栏已取消悬浮');
+    } catch (e) {
+      console.error('[HELIOS] 状态栏设置失败:', e);
+    }
   },
 
   // ════════════════════════════════════
