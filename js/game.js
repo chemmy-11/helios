@@ -25,7 +25,6 @@ const Game = {
     selectedSacrifice: null,
     llmAvailable: false,
     typingActive: false,
-    composingInput: false,      // 输入框 IME 组合中
     sharedAgentContext: null, // Agent 共享记忆（P2）
     noSingleBlameInsight: false, // 玩家是否意识到"没有谁负主要责任"
     canAdvanceToPhase3: false,  // 指控已回应 / 选择不指控 → true，可休息推进
@@ -54,8 +53,6 @@ const Game = {
     this.renderLocationView();
     this.updatePhaseDisplay();
     this.showPhaseTransition(1);
-    this.initInputMirror();
-    this.adaptTextarea(); // 初始校准输入框高度
     this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
     this.setupExitGuard();
     console.log('[HELIOS] Game initialized.');
@@ -228,15 +225,6 @@ const Game = {
         e.preventDefault();
         this.handlePlayerInput();
       }
-    });
-    this.el.playerInput.addEventListener('input', () => this.adaptTextarea());
-    // IME 组合保护：组合期间跳过高度适配（避免光标跳动），组合结束后补一次校准
-    this.el.playerInput.addEventListener('compositionstart', () => {
-      this.state.composingInput = true;
-    });
-    this.el.playerInput.addEventListener('compositionend', () => {
-      this.state.composingInput = false;
-      this.adaptTextarea();
     });
 
     // Report editor
@@ -698,7 +686,6 @@ const Game = {
     if (this.el.drawerOverlay) {
       this.el.drawerOverlay.classList.remove('show');
     }
-    this.adaptTextarea(); // 初始校准输入框高度
   },
 
   // Show first-time dialogue guidance (localStorage-based, once per browser)
@@ -724,54 +711,6 @@ const Game = {
     try {
       localStorage.setItem('helios_guide_shown', 'true');
     } catch(e) {}
-  },
-
-  adaptTextarea() {
-    const ta = this.el.playerInput;
-    if (!ta) return;
-    // IME 组合中跳过（组合结束会补一次）
-    if (this.state.composingInput) return;
-    const mirror = this.el.inputMirror;
-    if (!mirror) return;
-    // 同步宽度（窗口变化时跟随）
-    mirror.style.width = ta.clientWidth + 'px';
-    // 同步内容（末尾补换行占位，保证末尾换行时高度正确）
-    mirror.textContent = ta.value + '\n';
-    const newH = Math.min(mirror.scrollHeight, 120);
-    if (Math.abs(newH - ta.offsetHeight) > 2) {
-      // 延迟到下一帧设置，避免 input 同步阶段重排干扰 IME 锚点
-      requestAnimationFrame(() => {
-        ta.style.height = newH + 'px';
-      });
-    }
-  },
-
-  // 创建隐藏镜像 div：样式与输入框完全一致，用于测量内容高度（不重排输入框本身）
-  initInputMirror() {
-    const ta = this.el.playerInput;
-    if (!ta) return;
-    const cs = getComputedStyle(ta);
-    const mirror = document.createElement('div');
-    mirror.style.cssText = [
-      'position:absolute',
-      'left:-9999px',
-      'top:0',
-      'visibility:hidden',
-      'white-space:pre-wrap',
-      'overflow-wrap:break-word',
-      'word-break:break-word',
-      'width:' + ta.clientWidth + 'px',
-      'font-family:' + cs.fontFamily,
-      'font-size:' + cs.fontSize,
-      'font-weight:' + cs.fontWeight,
-      'line-height:' + cs.lineHeight,
-      'letter-spacing:' + cs.letterSpacing,
-      'padding:' + cs.paddingTop + ' ' + cs.paddingRight + ' ' + cs.paddingBottom + ' ' + cs.paddingLeft,
-      'min-height:36px',
-      'max-height:120px'
-    ].join(';');
-    document.body.appendChild(mirror);
-    this.el.inputMirror = mirror;
   },
 
   renderTerminalHeader(npcId) {
@@ -873,7 +812,7 @@ const Game = {
 
   handlePlayerInput() {
     const input = this.el.playerInput;
-    const text = input.value.trim();
+    const text = input.innerText.trim();
     if (!text) return;
     
     const npcId = this.state.currentNPC;
@@ -882,8 +821,8 @@ const Game = {
       return;
     }
     
-    input.value = '';
-    this.adaptTextarea();
+    input.innerHTML = '';
+    input.scrollTop = 0;
     
     // Show player message
     this.appendPlayerMessage(text);

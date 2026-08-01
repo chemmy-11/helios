@@ -504,12 +504,13 @@ body {
   font-family: var(--font-mono);
   font-size: 14px;
   outline: none;
-  resize: none;
   overflow-y: auto;
   min-height: 36px;
   max-height: 120px;
   line-height: 1.6;
   padding: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .send-btn {
