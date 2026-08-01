@@ -574,6 +574,7 @@ const Game = {
     }
     if (newPhase >= 3) {
       this.unlockView('report');
+      this.renderLogViewer(); // Re-render to unlock phase3 logs
       this.addSystemMessage('最终报告提交窗口已开放。请在48小时倒计时结束前提交调查结论。');
     }
   },
@@ -1338,8 +1339,8 @@ const Game = {
     const isReviewMode = this.state.ending === 'success' || this.state.ending === 'good';
     
     GAME_DATA.logs.forEach(log => {
-      const isLocked = (log.access === 'phase2' && this.state.phase < 2) || (log.access === 'success' && !isReviewMode);
-      const lockLabel = log.access === 'phase2' ? '阶段二解锁' : (log.access === 'success' ? '结局解锁' : '');
+      const isLocked = (log.access === 'phase2' && this.state.phase < 2) || (log.access === 'phase3' && this.state.phase < 3) || (log.access === 'success' && !isReviewMode);
+      const lockLabel = log.access === 'phase2' ? '阶段二解锁' : (log.access === 'phase3' ? '阶段三解锁' : (log.access === 'success' ? '结局解锁' : ''));
       
       html += `<div class="log-entry-card ${isLocked ? 'locked' : ''}" data-log-id="${log.id}">`;
       html += `<div class="log-entry-header">`;
