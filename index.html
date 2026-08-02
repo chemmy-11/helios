@@ -247,5 +247,21 @@
 <script src="js/data.js"></script>
 <script src="js/game.js"></script>
 
+<!-- 启动调试条（独立于 game.js，用于确认 APK 版本；定位后移除） -->
+<script>
+(function () {
+  try {
+    var bar = document.createElement('div');
+    bar.id = 'kb-boot-bar';
+    bar.style.cssText = 'position:fixed;top:30%;left:5%;right:5%;z-index:9999999;' +
+      'background:#00ff00;color:#000;font-size:15px;font-weight:bold;padding:10px;' +
+      'text-align:center;border:3px solid #000;border-radius:8px;font-family:monospace;';
+    bar.textContent = 'BOOT v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') +
+      ' | Capacitor=' + (typeof window.Capacitor !== 'undefined' ? 'yes' : 'no');
+    document.body.appendChild(bar);
+  } catch (e) { /* 调试条失败不影响游戏 */ }
+})();
+</script>
+
 </body>
 </html>

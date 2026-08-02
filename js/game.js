@@ -98,8 +98,8 @@ const Game = {
         ' vh=' + window.innerHeight + ' sh=' + window.screen.height +
         ' dpr=' + (window.devicePixelRatio || 1) + ' shCss=' + screenH();
     };
-    // 注入调试条 DOM（仅原生环境；定位用，验证后移除）
-    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    // 注入调试条 DOM（定位用，验证后移除；无条件注入便于区分环境问题）
+    {
       const bar = document.createElement('div');
       bar.id = 'kb-debug-bar';
       bar.style.cssText = 'position:fixed;top:35%;left:8%;right:8%;z-index:999999;background:#ffe600;color:#000;font-size:16px;font-weight:bold;padding:14px 10px;text-align:center;border:3px solid #c0392b;border-radius:10px;font-family:monospace;line-height:1.5;';
