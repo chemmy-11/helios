@@ -41,32 +41,46 @@ const Game = {
   // 二、初始化
   // ════════════════════════════════════
 
+  // 初始化：每步独立 try/catch，任一步失败不阻断后续（防静默崩溃，dev-brief-16 §8.2）
   init() {
-    this.cacheElements();
-    this.bindEvents();
-    this.initConversations();
-    this.renderLocations();
-    this.renderNPCList();
-    this.renderTerminalHeader(null);
-    this.renderEvidenceBoard();
-    this.renderLogViewer();
-    this.renderTimeline();
-    this.renderLocationView();
-    this.updatePhaseDisplay();
-    this.showPhaseTransition(1);
-    this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';    this.checkApiKey();
-    this.setupExitGuard();
-    this.setupStatusBar();
-    this.setupKeyboard();
+    try {
+      this._safeStep('cacheElements', () => this.cacheElements());
+      this._safeStep('bindEvents', () => this.bindEvents());
+      this._safeStep('initConversations', () => this.initConversations());
+      this._safeStep('renderLocations', () => this.renderLocations());
+      this._safeStep('renderNPCList', () => this.renderNPCList());
+      this._safeStep('renderTerminalHeader', () => this.renderTerminalHeader(null));
+      this._safeStep('renderEvidenceBoard', () => this.renderEvidenceBoard());
+      this._safeStep('renderLogViewer', () => this.renderLogViewer());
+      this._safeStep('renderTimeline', () => this.renderTimeline());
+      this._safeStep('renderLocationView', () => this.renderLocationView());
+      this._safeStep('updatePhaseDisplay', () => this.updatePhaseDisplay());
+      this._safeStep('showPhaseTransition', () => this.showPhaseTransition(1));
+      this._safeStep('welcomeMessage', () => {
+        this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
+      });
+      this._safeStep('checkApiKey', () => this.checkApiKey());
+      this._safeStep('setupExitGuard', () => this.setupExitGuard());
+      this._safeStep('setupStatusBar', () => this.setupStatusBar());
+      this._safeStep('setupKeyboard', () => this.setupKeyboard());
+    } catch (e) {
+      // 兜底：理论不可达（每步已独立捕获），保证任何异常可见
+      console.error('[HELIOS] init 整体异常（不应出现）', e);
+    }
     // 启动 4 秒后静默检查更新（仅原生 App）
     setTimeout(() => this.checkForUpdates(false), 4000);
     console.log('[HELIOS] Game initialized.');
   },
 
-  // 键盘适配：由 MainActivity 原生 ime insets 监听注入 --kb-height（跨版本可靠，
-  // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（ime-nav）。
-  // JS 侧补偿：若系统同时收缩了视口（innerHeight 变小，如 adjustResize 实际生效），
-  // 需减去收缩量避免双重偏移（否则缝隙≈键盘高度）；再减去 height 已预留的底部导航高。
+  // 单步安全执行：init 链单步失败仅记录，不阻断后续（dev-brief-16 §8.2）
+  _safeStep(name, fn) {
+    try {
+      fn();
+    } catch (e) {
+      console.error('[HELIOS] init 步骤失败: ' + name, e);
+    }
+  },
+
   // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（物理像素已转 CSS 像素），
   // #main-layout padding-bottom 消费该变量撑开底部，输入区贴合键盘上沿。
   // 真机视口不随键盘收缩（adjustNothing），无双重偏移。

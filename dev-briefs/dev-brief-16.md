@@ -125,3 +125,25 @@ ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v
 ## 七、版本号
 
 `js/version.js`：`APP_VERSION = '1.6.3'`
+
+
+---
+
+## 八、补充记录（2026-08-02 设计确认与后续改进）
+
+### 8.1 设计决策：微信式导航横条方案永久放弃（正式拍板）
+
+- 键盘弹出时导航被键盘遮挡 → **接受为最终行为**，不再实现"导航移入输入框上方"。
+- 理由：键盘场景下切换视图需求低频，收益低于实现复杂度与回归风险。
+- 若未来确有需求：采用 **overlay 方案**（键盘弹出时在输入框上方渲染不参与 flex 流的浮层横条，位置由 `--kb-height` 确定），**禁止**复活 v1.6.1 的 DOM 移动方案（挤扁布局 + 500ms 恢复竞态）。
+
+### 8.2 工程改进项（挂入下一轮开发任务清单，低优先级）
+
+**问题**：`Game.init()` 是 15 步裸调用链（cacheElements → bindEvents → renderLocations → ... → setupKeyboard → checkForUpdates），无整体 try/catch。任一步抛异常（DOM 缺失 / 旧存档畸形 / WebView API 差异）→ 后续步骤静默跳过，页面"看起来正常"但功能缺失（API Key 弹窗、退出提醒、键盘适配、更新检查全部可能被吞）。
+
+**修复要求**：
+1. init 链每步独立 try/catch + `console.error`（单步失败不阻断后续）；
+2. 至少整体包裹一层 try/catch 保证可见性；
+3. 验证方式：人为在中间步骤抛异常，确认后续步骤仍执行且 console 有错误记录。
+
+**背景教训**（踩坑 #5）：调试条依赖 setupKeyboard 死活不显示，根因即上游步骤静默崩溃。
