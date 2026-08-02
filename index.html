@@ -247,41 +247,5 @@
 <script src="js/data.js"></script>
 <script src="js/game.js"></script>
 
-<!-- 启动调试条（独立于 game.js，用于确认 APK 版本；定位后移除） -->
-<script>
-(function () {
-  try {
-    var bar = document.createElement('div');
-    bar.id = 'kb-boot-bar';
-    bar.style.cssText = 'position:fixed;top:30%;left:5%;right:5%;z-index:9999999;' +
-      'background:#00ff00;color:#000;font-size:15px;font-weight:bold;padding:10px;' +
-      'text-align:center;border:3px solid #000;border-radius:8px;font-family:monospace;';
-    bar.textContent = 'BOOT v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') +
-      ' | Capacitor=' + (typeof window.Capacitor !== 'undefined' ? 'yes' : 'no');
-    document.body.appendChild(bar);
-
-    // KB 调试条（黄条，轮询更新 vh/屏幕高/kb 注入值，不依赖 game.js；定位后移除）
-    var kb = document.createElement('div');
-    kb.id = 'kb-debug-bar';
-    kb.style.cssText = 'position:fixed;top:38%;left:5%;right:5%;z-index:9999998;' +
-      'background:#ffe600;color:#000;font-size:15px;font-weight:bold;padding:10px;' +
-      'text-align:center;border:3px solid #c0392b;border-radius:8px;font-family:monospace;line-height:1.4;';
-    kb.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + ' [KB] 等待数据';
-    document.body.appendChild(kb);
-
-    function kbUpdate() {
-      var b = document.getElementById('kb-debug-bar');
-      if (!b) return;
-      var cs = getComputedStyle(document.documentElement);
-      b.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') +
-        ' vh=' + window.innerHeight +
-        ' shCss=' + Math.round((window.screen.height || 0) / (window.devicePixelRatio || 1)) +
-        ' kbH=' + cs.getPropertyValue('--kb-height').trim();
-    }
-    setInterval(kbUpdate, 800); // 轮询：键盘弹出时 vh 变化必然反映
-  } catch (e) { /* 调试条失败不影响游戏 */ }
-})();
-</script>
-
 </body>
 </html>

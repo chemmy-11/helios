@@ -67,9 +67,9 @@ const Game = {
   // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（ime-nav）。
   // JS 侧补偿：若系统同时收缩了视口（innerHeight 变小，如 adjustResize 实际生效），
   // 需减去收缩量避免双重偏移（否则缝隙≈键盘高度）；再减去 height 已预留的底部导航高。
-  // 键盘适配（v1.4 回归）：真机视口随键盘收缩（adjustNothing 未生效，等效 adjustResize），
-  // 输入框由系统自动顶起贴合；不再注入/撑开 padding，避免双重偏移。
-  // 调试信息由 index.html 独立脚本轮询显示（vh/kbH）。
+  // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（物理像素已转 CSS 像素），
+  // #main-layout padding-bottom 消费该变量撑开底部，输入区贴合键盘上沿。
+  // 真机视口不随键盘收缩（adjustNothing），无双重偏移。
   setupKeyboard() {},
 
   // 状态栏动态校正：根据系统是否让位决定 CSS 占位
