@@ -67,6 +67,7 @@ upload_asset update.zip update.zip
 # 7. 更新 update/version.json（指向 release 的 zip 下载地址）
 python - "$VERSION" "$TAG" "$CHANGELOG_BODY" <<'PY'
 import json, sys
+sys.stdout.reconfigure(encoding='utf-8')  # Windows 控制台 GBK 无法打印 emoji，强制 UTF-8
 version, tag, changelog = sys.argv[1], sys.argv[2], sys.argv[3]
 manifest = {
     "version": version,
