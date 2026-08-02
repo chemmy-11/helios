@@ -91,6 +91,10 @@ body {
   white-space: nowrap;
 }
 
+/* 桌面端：完整 logo 文案；移动端简化版与版本号默认隐藏 */
+.logo-text-mobile { display: none; }
+.mobile-version { display: none; }
+
 .phase-indicator {
   display: flex;
   align-items: center;

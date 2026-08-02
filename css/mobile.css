@@ -72,6 +72,19 @@
     white-space: nowrap;
   }
 
+  /* 移动端：logo 简化为 HELIOS，右侧显示版本号 */
+  .logo-text-full { display: none; }
+  .logo-text-mobile { display: inline; }
+
+  .mobile-version {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
   /* Hide desktop elements in top bar */
   .phase-indicator,
   .view-tabs {

@@ -60,6 +60,10 @@ const Game = {
         this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
       });
       this._safeStep('checkApiKey', () => this.checkApiKey());
+      this._safeStep('renderVersion', () => {
+        const ver = document.getElementById('mobile-version');
+        if (ver) ver.textContent = 'v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '');
+      });
       this._safeStep('setupExitGuard', () => this.setupExitGuard());
       this._safeStep('setupStatusBar', () => this.setupStatusBar());
       this._safeStep('setupKeyboard', () => this.setupKeyboard());
