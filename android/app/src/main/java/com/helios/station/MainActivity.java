@@ -26,19 +26,23 @@ public class MainActivity extends BridgeActivity {
 
         // 键盘顶起适配：直接监听 ime insets（不依赖 adjustResize / opt-out，
         // 兼容 Android 15 强制 edge-to-edge 与 Android 16 移除 opt-out 的情况）。
-        // 计算键盘实际遮挡高度并注入 CSS 变量 --kb-height，由 JS 撑开页面底部。
+        // 计算键盘实际遮挡高度并注入 CSS 变量 --kb-height，由 CSS 撑开页面底部。
+        // 注意：WindowInsets 单位是物理像素，必须除以 density 转 CSS 像素，
+        // 否则注入的 px 值会被 CSS 放大 dpr 倍（如 1095px ≈ 1.4 个屏幕高）。
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v, insets) -> {
             int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
             int nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-            // 非 edge-to-edge（系统已 resize）时 ime insets 为 0 → 注入 0，不重复撑开
-            final int kb = Math.max(0, ime - nav);
             final WebView wv = this.bridge.getWebView();
             if (wv != null) {
+                final float density = wv.getResources().getDisplayMetrics().density;
+                final int kbCss = Math.max(0, Math.round((ime - nav) / density));
+                final int imeCss = Math.round(ime / density);
+                final int navCss = Math.round(nav / density);
                 wv.post(() -> wv.evaluateJavascript(
-                    "document.documentElement.style.setProperty('--kb-height', '" + kb + "px');" +
-                    "document.documentElement.style.setProperty('--kb-ime', '" + ime + "px');" +
-                    "document.documentElement.style.setProperty('--kb-nav', '" + nav + "px');" +
-                    "if (window.__onKbChange) window.__onKbChange(" + ime + "," + nav + "," + kb + "); true",
+                    "document.documentElement.style.setProperty('--kb-height', '" + kbCss + "px');" +
+                    "document.documentElement.style.setProperty('--kb-ime', '" + imeCss + "px');" +
+                    "document.documentElement.style.setProperty('--kb-nav', '" + navCss + "px');" +
+                    "if (window.__onKbChange) window.__onKbChange(" + imeCss + "," + navCss + "," + kbCss + "); true",
                     null));
             }
             return insets;

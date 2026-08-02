@@ -158,8 +158,10 @@ body {
 #main-layout {
   display: flex;
   height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
-  /* 键盘顶起由系统视口收缩完成（真机 adjustNothing 未生效，等效 adjustResize）；
-     不再 padding 撑开，避免双重偏移。移动端 height 扣 --bottom-nav-h 预留横条位 */
+  /* 键盘弹出：原生注入 --kb-height（CSS 像素，MainActivity 已除 density）；
+     上移量 = kb - height 已预留的底部导航高，输入区贴合键盘上沿；
+     max 保护小键盘场景。真机视口不随键盘收缩（adjustNothing），无双重偏移 */
+  padding-bottom: max(0px, calc(var(--kb-height, 0px) - var(--bottom-nav-h, 0px)));
   transition: padding-bottom 0.15s ease-out;
 }
 
