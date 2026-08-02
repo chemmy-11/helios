@@ -1,6 +1,6 @@
 {
-  "version": "1.6.5",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.5/update.zip",
+  "version": "1.6.6",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.6/update.zip",
   "required": false,
-  "changelog": "修复：在线更新后自动回退旧版本（根因：未调用 notifyAppReady，capgo 判定未确认而回滚）\n修复：侧栏 API Key 输入框位置保留状态栏适配（靠上对齐顶栏但避开状态栏）"
+  "changelog": "线索板块重构：卡池重写 56 张（含 4 张推理卡），修复 10 处数据/信息边界冲突\n线索触发改意图词族 + NPC 掌握的事实自然说出——发现难度下降，线索必与对话对上\n线索卡带对话出处摘录（随存档保存）\n态度卡不计入指控计数\n顶栏布局优化（左阶段名/中HELIOS/右版本号）"
 }
