@@ -259,6 +259,15 @@
     bar.textContent = 'BOOT v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') +
       ' | Capacitor=' + (typeof window.Capacitor !== 'undefined' ? 'yes' : 'no');
     document.body.appendChild(bar);
+
+    // KB 调试条（黄条，数据由 game.js 的 __kbDebug 更新；定位后移除）
+    var kb = document.createElement('div');
+    kb.id = 'kb-debug-bar';
+    kb.style.cssText = 'position:fixed;top:38%;left:5%;right:5%;z-index:9999998;' +
+      'background:#ffe600;color:#000;font-size:15px;font-weight:bold;padding:10px;' +
+      'text-align:center;border:3px solid #c0392b;border-radius:8px;font-family:monospace;line-height:1.4;';
+    kb.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + ' [KB] 等待数据';
+    document.body.appendChild(kb);
   } catch (e) { /* 调试条失败不影响游戏 */ }
 })();
 </script>
