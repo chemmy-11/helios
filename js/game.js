@@ -97,12 +97,14 @@ const Game = {
   // 真机视口不随键盘收缩（adjustNothing），无双重偏移。
   setupKeyboard() {},
 
-  // 状态栏动态校正：根据系统是否让位决定 CSS 占位
-  // overlays=true（edge-to-edge 生效）→ 占位 28px 避开状态栏
-  // overlays=false（opt-out 生效/系统已让位）→ 占位 0，避免双重下移
+  // 状态栏动态校正：真实高度由 MainActivity insets 注入 --status-bar-h
+  // （跨机型准确，挖孔/刘海屏高度各异，硬编码 28px 会遮挡内容）；
+  // 此处仅在原生未注入时用 getInfo 兜底（老版本 APK / 浏览器调试）
   async setupStatusBar() {
     const SB = window.Capacitor?.Plugins?.StatusBar;
     if (!SB || !window.Capacitor?.isNativePlatform()) return;
+    // 原生已注入（documentElement 内联样式）→ 不覆盖
+    if (document.documentElement.style.getPropertyValue('--status-bar-h')) return;
     try {
       const info = await SB.getInfo();
       const h = info.overlays ? 28 : 0;

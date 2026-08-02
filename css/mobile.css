@@ -57,19 +57,22 @@
 
   /* === TOP BAR === */
   #top-bar {
+    position: relative; /* logo 绝对居中的定位基准 */
     gap: 10px;
     padding: var(--status-bar-h, 0px) 12px 0 12px;
     height: calc(var(--topbar-h) + var(--status-bar-h, 0px));
   }
 
+  /* 移动端：logo 精确居中（absolute 定位，不受左右内容宽度影响） */
   .logo {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 12px;
     letter-spacing: 1px;
-    flex: 1;
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+    pointer-events: none; /* 不遮挡左右区域点击 */
   }
 
   /* 移动端：logo 简化为 HELIOS，右侧显示版本号 */
@@ -78,6 +81,7 @@
 
   .mobile-version {
     display: block;
+    margin-left: auto; /* 贴右 */
     font-size: 11px;
     color: var(--text-dim);
     font-family: var(--font-mono);

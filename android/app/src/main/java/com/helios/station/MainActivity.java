@@ -32,13 +32,18 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content), (v, insets) -> {
             int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
             int nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+            int statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             final WebView wv = this.bridge.getWebView();
             if (wv != null) {
                 final float density = wv.getResources().getDisplayMetrics().density;
                 final int kbCss = Math.max(0, Math.round((ime - nav) / density));
                 final int imeCss = Math.round(ime / density);
                 final int navCss = Math.round(nav / density);
+                // 真实状态栏高度（物理像素 → CSS 像素）：挖孔/刘海屏等机型高度各异，
+                // 硬编码 28px 会遮挡内容，须按实际 insets 注入
+                final int statusBarCss = Math.round(statusBar / density);
                 wv.post(() -> wv.evaluateJavascript(
+                    "document.documentElement.style.setProperty('--status-bar-h', '" + statusBarCss + "px');" +
                     "document.documentElement.style.setProperty('--kb-height', '" + kbCss + "px');" +
                     "document.documentElement.style.setProperty('--kb-ime', '" + imeCss + "px');" +
                     "document.documentElement.style.setProperty('--kb-nav', '" + navCss + "px');" +
