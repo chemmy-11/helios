@@ -63,6 +63,12 @@ const Game = {
       this._safeStep('setupExitGuard', () => this.setupExitGuard());
       this._safeStep('setupStatusBar', () => this.setupStatusBar());
       this._safeStep('setupKeyboard', () => this.setupKeyboard());
+      // 通知 capgo 当前 bundle 加载成功，防止自动回滚到上一版本
+      // （capgo 文档：不调用 notifyAppReady 会回滚到之前成功的版本）
+      this._safeStep('notifyAppReady', () => {
+        const Updater = window.Capacitor?.Plugins?.CapacitorUpdater;
+        if (Updater && Updater.notifyAppReady) Updater.notifyAppReady().catch(() => {});
+      });
     } catch (e) {
       // 兜底：理论不可达（每步已独立捕获），保证任何异常可见
       console.error('[HELIOS] init 整体异常（不应出现）', e);
