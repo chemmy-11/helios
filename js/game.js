@@ -90,18 +90,20 @@ const Game = {
       const cs = getComputedStyle(document.documentElement);
       const bar = document.getElementById('kb-debug-bar');
       if (!bar) return;
-      bar.textContent = 'ime=' + cs.getPropertyValue('--kb-ime').trim() +
+      bar.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + String.fromCharCode(10) +
+        'ime=' + cs.getPropertyValue('--kb-ime').trim() +
         ' nav=' + cs.getPropertyValue('--kb-nav').trim() +
         ' kb=' + this._kbNow + ' shrink=' + shrink() +
         ' pad=' + this._kbPad +
         ' vh=' + window.innerHeight + ' sh=' + window.screen.height +
         ' dpr=' + (window.devicePixelRatio || 1) + ' shCss=' + screenH();
     };
-    // 注入调试条 DOM（仅原生环境）
+    // 注入调试条 DOM（仅原生环境；定位用，验证后移除）
     if (window.Capacitor && window.Capacitor.isNativePlatform()) {
       const bar = document.createElement('div');
       bar.id = 'kb-debug-bar';
-      bar.style.cssText = 'position:fixed;top:calc(var(--status-bar-h, 0px) + 2px);left:0;right:0;z-index:99999;background:#c0392b;color:#fff;font-size:11px;padding:2px 8px;font-family:monospace;';
+      bar.style.cssText = 'position:fixed;top:35%;left:8%;right:8%;z-index:999999;background:#ffe600;color:#000;font-size:16px;font-weight:bold;padding:14px 10px;text-align:center;border:3px solid #c0392b;border-radius:10px;font-family:monospace;line-height:1.5;';
+      bar.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + ' [KB] 初始化';
       document.body.appendChild(bar);
     }
   },
