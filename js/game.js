@@ -67,39 +67,10 @@ const Game = {
   // 键盘适配：MainActivity 原生 ime insets 监听注入 --kb-height（ime-nav）。
   // JS 侧补偿：若系统同时收缩了视口（innerHeight 变小，如 adjustResize 实际生效），
   // 需减去收缩量避免双重偏移（否则缝隙≈键盘高度）；再减去 height 已预留的底部导航高。
-  setupKeyboard() {
-    this._kbNow = 0;
-    this._kbPad = 0;
-    const navH = () => parseInt(getComputedStyle(document.documentElement)
-      .getPropertyValue('--bottom-nav-h')) || 0;
-    // screen.height 在 Android WebView 是物理像素，须除 devicePixelRatio 转 CSS 像素再与 innerHeight 比较
-    const screenH = () => (window.screen.height || window.innerHeight) / (window.devicePixelRatio || 1);
-    const shrink = () => Math.max(0, screenH() - window.innerHeight);
-    const applyKb = () => {
-      this._kbPad = Math.max(0, this._kbNow - navH() - shrink());
-      document.documentElement.style.setProperty('--kb-pad', this._kbPad + 'px');
-      if (window.__kbDebug) window.__kbDebug();
-    };
-    window.__onKbChange = (ime, navBar, kb) => {
-      this._kbNow = kb;
-      applyKb();
-    };
-    window.addEventListener('resize', applyKb);
-    // 真机调试（验证后移除）：屏幕顶条显示 ime/nav/kb/shrink/pad 原始值
-    window.__kbDebug = () => {
-      const cs = getComputedStyle(document.documentElement);
-      const bar = document.getElementById('kb-debug-bar');
-      if (!bar) return;
-      bar.textContent = 'HELIOS v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '?') + String.fromCharCode(10) +
-        'ime=' + cs.getPropertyValue('--kb-ime').trim() +
-        ' nav=' + cs.getPropertyValue('--kb-nav').trim() +
-        ' kb=' + this._kbNow + ' shrink=' + shrink() +
-        ' pad=' + this._kbPad +
-        ' vh=' + window.innerHeight + ' sh=' + window.screen.height +
-        ' dpr=' + (window.devicePixelRatio || 1) + ' shCss=' + screenH();
-    };
-
-  },
+  // 键盘适配（v1.4 回归）：真机视口随键盘收缩（adjustNothing 未生效，等效 adjustResize），
+  // 输入框由系统自动顶起贴合；不再注入/撑开 padding，避免双重偏移。
+  // 调试信息由 index.html 独立脚本轮询显示（vh/kbH）。
+  setupKeyboard() {},
 
   // 状态栏动态校正：根据系统是否让位决定 CSS 占位
   // overlays=true（edge-to-edge 生效）→ 占位 28px 避开状态栏

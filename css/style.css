@@ -156,14 +156,10 @@ body {
 
 /* === MAIN LAYOUT === */
 #main-layout {
-  /* 兜底：JS（__onKbChange → --kb-pad，含视口收缩补偿）未运行时，
-     直接用原生注入的 --kb-height 减底部导航预留，保证输入框仍被顶起 */
-  --kb-pad-fallback: max(0px, calc(var(--kb-height, 0px) - var(--bottom-nav-h, 0px)));
   display: flex;
   height: calc(100vh - var(--topbar-h) - var(--status-bar-h, 0px));
-  /* 键盘弹出：--kb-pad 由 JS 计算（原生 kb - 视口收缩量 - 底部导航预留），
-     输入区直接贴合键盘上沿；无 JS 时退化为 --kb-pad-fallback */
-  padding-bottom: var(--kb-pad, var(--kb-pad-fallback));
+  /* 键盘顶起由系统视口收缩完成（真机 adjustNothing 未生效，等效 adjustResize）；
+     不再 padding 撑开，避免双重偏移。移动端 height 扣 --bottom-nav-h 预留横条位 */
   transition: padding-bottom 0.15s ease-out;
 }
 
