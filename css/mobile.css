@@ -112,7 +112,7 @@
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border-right: 1px solid var(--border);
     overflow-y: auto;
-    padding-top: calc(var(--topbar-h) + var(--status-bar-h, 0px));
+    padding-top: 0; /* API key 输入框紧贴屏幕顶（与主界面顶栏上方对齐） */
     /* Override desktop flex props */
     flex-shrink: unset;
   }

@@ -122,11 +122,12 @@ const Game = {
         this.state.updateManifest = manifest;
         this.showPhasePrompt('updateAvailable');
       } else if (manual) {
-        this.addDirectMessage('当前已是最新版本（v' + local + '）。');
+        // 弹窗提示（字幕在非对话视图不可见）
+        this.showPhasePrompt('upToDate');
       }
     } catch (e) {
       console.error('[HELIOS] 更新检查失败:', e);
-      if (manual) this.addDirectMessage('更新检查失败：无法连接更新服务器。');
+      if (manual) this.showPhasePrompt('updateCheckFailed');
     }
   },
 
@@ -1622,6 +1623,26 @@ const Game = {
       actions.appendChild(btnSave);
       actions.appendChild(btnExit);
       actions.appendChild(btnStay);
+    } else if (type === 'upToDate') {
+      icon.textContent = '✅';
+      title.textContent = '已是最新版本';
+      body.textContent = '当前已是最新版本（v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '') + '），无需更新。';
+      hint.textContent = '';
+      const btnOk1 = document.createElement('button');
+      btnOk1.className = 'phase-prompt-btn primary';
+      btnOk1.textContent = '知道了';
+      btnOk1.addEventListener('click', closeWith);
+      actions.appendChild(btnOk1);
+    } else if (type === 'updateCheckFailed') {
+      icon.textContent = '⚠️';
+      title.textContent = '更新检查失败';
+      body.textContent = '无法连接更新服务器，请检查网络后重试。';
+      hint.textContent = '';
+      const btnOk2 = document.createElement('button');
+      btnOk2.className = 'phase-prompt-btn primary';
+      btnOk2.textContent = '知道了';
+      btnOk2.addEventListener('click', closeWith);
+      actions.appendChild(btnOk2);
     } else if (type === 'updateAvailable') {
       const manifest = this.state.updateManifest || {};
       icon.textContent = '🔄';
