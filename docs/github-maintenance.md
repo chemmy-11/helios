@@ -32,10 +32,12 @@ git push origin master
 
 `github.com:443` 会**间歇性连接失败**（DNS 解析到不可达 IP，如 `20.205.243.166` 超时）。表现：`git push` 报 `Failed to connect to github.com:443`。
 
+**本机已配置 git 代理**（`http.proxy = http://127.0.0.1:7897`，Clash 系端口）——**push 前必须先开代理软件**，否则报 `Failed to connect to github.com:443 over proxy 127.0.0.1`。开代理后通常直接成功（2026-08-02 v1.6.3 发布验证）。
+
 处理办法（按顺序试）：
 
 1. **直接重试**（网络抖动时第二次常能成功）；
-2. **用户开 VPN** 后重试；
+2. **开代理软件（Clash 等，端口 7897）后重试**；
 3. 检测可用 IP：
 
    ```bash
@@ -43,9 +45,19 @@ git push origin master
      --resolve github.com:443:140.82.112.4 https://github.com
    ```
 
-   曾验证可达 IP：`140.82.112.4`、`140.82.113.4`（返回 200）；`20.205.243.166` 常超时。
+   曾验证可达 IP：`140.82.112.4`、`140.82.113.4`（返回 200）；`20.205.243.166` 常超时。直连被 reset 时（`Connection was reset`）只能走代理。
 
 > push 失败不影响本地 commit，本地代码安全，网络恢复后重推即可。
+
+### 发布中断恢复（v1.6.3 实战）
+
+`publish-release.sh` 中途失败时按已完成的阶段恢复：
+
+| 已完成的阶段 | 恢复动作 |
+|---|---|
+| release 已创建 + 资产已上传，但 `git push` 失败 | **只需补 push**：`git push origin master`（version.json 已本地提交）。release 资产不受影响 |
+| release 创建失败 | 脚本会退出，先查网络/凭据再整体重跑 |
+| 凭据获取失败（`git credential fill` 空） | Windows 凭据管理器里确认 github.com 凭据存在 |
 
 ---
 
