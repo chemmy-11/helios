@@ -16,6 +16,7 @@ const Game = {
     visitedNodes: new Set(),
     askedQuestions: new Set(),
     discoveredClues: new Set(),
+    clueQuotes: {},     // 线索出处摘录（id → 对话原文片段）
     ending: null,
     reportSubmitted: false,
     accusationCount: 0,
@@ -889,7 +890,7 @@ const Game = {
       if (this.state.accusedNPCs.has(npcId)) {
         html += `<div class="typing-encouragement" style="color:var(--visited-green);">你已正式指控过${data.npc}。可切换其他对话对象继续指控。</div>`;
       } else if (!this.state.accusationUnlocked) {
-        html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[指控] 需要更多证据（已发现 ${this.state.discoveredClues.size}/10）</button>`;
+        html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[指控] 需要更多证据（已发现 ${this.countedClues()}/10）</button>`;
       } else {
         html += `<button class="dialogue-option" data-accuse="${npcId}" style="border-color:var(--danger-red);color:var(--danger-red);">[指控] 正式指控${data.npc}</button>`;
       }
@@ -897,7 +898,7 @@ const Game = {
         if (this.state.noAccusationUnlocked) {
           html += `<button class="dialogue-option" data-noaccuse="1" style="border-color:var(--text-dim);color:var(--text-dim);">[不指控] 不指控任何人 —— 问题或许不在个体</button>`;
         } else {
-          html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[不指控] 需要更多证据（已发现 ${this.state.discoveredClues.size}/20）</button>`;
+          html += `<button class="dialogue-option" disabled style="border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;">[不指控] 需要更多证据（已发现 ${this.countedClues()}/20）</button>`;
         }
       }
     }
@@ -947,7 +948,8 @@ const Game = {
 
     try {
       const promptWithContext = this.injectSharedContext(data.agent_prompt, npcId);
-      const response = await this.callLLM(promptWithContext, npcId, text);
+      const promptWithClues = this.injectClueFacts(promptWithContext, npcId);
+      const response = await this.callLLM(promptWithClues, npcId, text);
       this.removeTypingIndicator();
       this.appendNPCMessage(npcId, response);
       this.state.conversations[npcId].push({ role: 'npc', text: response });
@@ -1039,6 +1041,20 @@ const Game = {
     sharedText += '- 如果玩家反复问同一个问题（已经在对话记录中出现过），你可以说「我注意到你刚才问过R-7同样的问题」\n';
 
     return basePrompt + sharedText;
+  },
+
+  // 注入该 NPC 掌握的线索事实（dev-brief-17 7.5.4）：
+  // source 前缀匹配（startsWith，防误配）；排除 INFERENCE（推理卡仅玩家触发）
+  injectClueFacts(basePrompt, npcId) {
+    const facts = GAME_DATA.clues.filter(c => c.source.startsWith(npcId) && c.type !== 'INFERENCE');
+    if (!facts.length) return basePrompt;
+    const open = facts.filter(c => c.type !== 'SECRET');
+    const secret = facts.filter(c => c.type === 'SECRET');
+    let block = '\n\n【你掌握的事实（被问及时自然说出，明确回答）】\n';
+    open.forEach(c => { block += '- ' + c.content + '\n'; });
+    block += '\n【你知道但不主动说的（仅被直接追问时透露，不主动提起）】\n';
+    secret.forEach(c => { block += '- ' + c.content + '\n'; });
+    return basePrompt + block;
   },
 
   updateSharedContext(npcId, playerText) {
@@ -1230,20 +1246,21 @@ const Game = {
   // 九、线索系统
   // ════════════════════════════════════
 
-  discoverClue(clueName) {
+  discoverClue(clueName, triggerText) {
     const clue = GAME_DATA.clues.find(c => c.name === clueName || c.id === clueName);
     if (!clue) return;
     if (this.state.discoveredClues.has(clue.id)) return;
     
     this.state.discoveredClues.add(clue.id);
     clue.discovered = true;
+    if (triggerText) this.state.clueQuotes[clue.id] = triggerText.slice(0, 60);
     
     // 10 条：解锁指控；20 条：解锁不指控
-    if (!this.state.accusationUnlocked && this.state.discoveredClues.size >= 10) {
+    if (!this.state.accusationUnlocked && this.countedClues() >= 10) {
       this.state.accusationUnlocked = true;
       this.addDirectMessage('📋 你已收集到足够的证据（10 条）。指控功能已解锁——当你准备好时，可以正式发起指控。');
     }
-    if (!this.state.noAccusationUnlocked && this.state.discoveredClues.size >= 20) {
+    if (!this.state.noAccusationUnlocked && this.countedClues() >= 20) {
       this.state.noAccusationUnlocked = true;
       this.addDirectMessage('📋 证据已足够深入（20 条）。你也可以选择不指控任何人——问题或许不在个体。');
     }
@@ -1251,6 +1268,11 @@ const Game = {
     this.addDirectMessage(`[线索发现] ${clue.name} — ${clue.content}`);
     this.renderEvidenceBoard();
     this.renderTimeline();
+  },
+
+  // 有效证据数（排除 countsToward: false 的态度卡，dev-brief-17 7.5.6）
+  countedClues() {
+    return GAME_DATA.clues.filter(c => this.state.discoveredClues.has(c.id) && c.countsToward !== false).length;
   },
 
   // Check player's free-text input for keyword clues (soft track clue unlock)
@@ -1283,7 +1305,7 @@ const Game = {
             return;
           }
         }
-        this.discoverClue(entry.clue);
+        this.discoverClue(entry.clue, text);
       }
     });
   },
@@ -1339,12 +1361,15 @@ const Game = {
       html += '<div style="margin:8px 0 4px;font-size:11px;color:var(--text-dim);text-transform:uppercase;">已确认线索</div>';
       discovered.forEach(clue => {
         const hasRelated = (clue.related_logs && clue.related_logs.length) || (clue.related_dialogues && clue.related_dialogues.length);
+        const q = this.state.clueQuotes[clue.id];
+        const quoteHtml = q ? '<div class="clue-quote">对话摘录：\u201c' + q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '\u201d</div>' : '';
         html += `
           <div class="clue-card confirmed${hasRelated ? ' has-related' : ''}" data-clue="${clue.id}">
             <div class="clue-type">${clue.type}</div>
             <div class="clue-name">${clue.name}</div>
             <div class="clue-source">来源: ${clue.source}</div>
             <div class="clue-content">${clue.content}</div>
+            ${quoteHtml}
             ${hasRelated ? '<div class="clue-related-toggle">▸ 查看关联证据</div>' : ''}
             ${hasRelated ? '<div class="clue-related" style="display:none;">' + this.renderClueRelated(clue) + '</div>' : ''}
           </div>
@@ -1714,6 +1739,7 @@ const Game = {
       currentNPC: this.state.currentNPC,
       conversations: this.state.conversations,
       discoveredClues: Array.from(this.state.discoveredClues),
+      clueQuotes: this.state.clueQuotes,
       visitedNodes: Array.from(this.state.visitedNodes),
       askedQuestions: Array.from(this.state.askedQuestions),
       sharedAgentContext: this.state.sharedAgentContext ? JSON.parse(JSON.stringify(this.state.sharedAgentContext)) : null,
@@ -1737,6 +1763,7 @@ const Game = {
     this.state.currentNPC = save.currentNPC || null;
     this.state.conversations = save.conversations || {};
     this.state.discoveredClues = new Set(save.discoveredClues || []);
+    this.state.clueQuotes = save.clueQuotes || {};
     this.state.visitedNodes = new Set(save.visitedNodes || []);
     this.state.askedQuestions = new Set(save.askedQuestions || []);
     this.state.sharedAgentContext = save.sharedAgentContext ? JSON.parse(JSON.stringify(save.sharedAgentContext)) : null;
@@ -1750,8 +1777,8 @@ const Game = {
     this.state.accusationUnlocked = !!save.accusationUnlocked;
     this.state.noAccusationUnlocked = !!save.noAccusationUnlocked;
     // 旧档兼容：按当前线索数重算门槛（免疫旧阈值/缺失字段的存档）
-    if (this.state.discoveredClues.size >= 10) this.state.accusationUnlocked = true;
-    if (this.state.discoveredClues.size >= 20) this.state.noAccusationUnlocked = true;
+    if (this.countedClues() >= 10) this.state.accusationUnlocked = true;
+    if (this.countedClues() >= 20) this.state.noAccusationUnlocked = true;
     this.state.dataSubTab = save.dataSubTab || 'logs';
     this.state.reportDraft = save.reportDraft || '';
     // 同步线索 discovered 标记
