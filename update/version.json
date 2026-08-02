@@ -1,6 +1,6 @@
 {
-  "version": "1.6.6",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.6/update.zip",
+  "version": "1.6.7",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.7/update.zip",
   "required": false,
-  "changelog": "线索板块重构：卡池重写 56 张（含 4 张推理卡），修复 10 处数据/信息边界冲突\n线索触发改意图词族 + NPC 掌握的事实自然说出——发现难度下降，线索必与对话对上\n线索卡带对话出处摘录（随存档保存）\n态度卡不计入指控计数\n顶栏布局优化（左阶段名/中HELIOS/右版本号）"
+  "changelog": "HELIOS 标题精确居中（不再受左右内容宽度影响）\n状态栏真实高度适配：原生 insets 注入，挖孔/刘海屏不再遮挡顶栏内容\n版本号贴右侧显示\n⚠️ 本版本含原生改动（MainActivity），需安装新 APK"
 }
