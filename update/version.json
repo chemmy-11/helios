@@ -1,6 +1,6 @@
 {
-  "version": "1.6.2",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.2/update.zip",
+  "version": "1.6.3",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.3/update.zip",
   "required": false,
-  "changelog": "修复在线更新下载失败（Download called without version）\n更新应用方式优化：下载后不打断当前会话，下次启动生效\n键盘弹出适配与微信式导航横条"
+  "changelog": "键盘修复：输入框贴合键盘上沿（根因：insets 物理像素未转 CSS 像素，放大 dpr 倍）\nandroid 原生层纳入版本控制（MainActivity 可追溯）\n本版本含原生改动，需安装新 APK"
 }
