@@ -11,6 +11,12 @@ echo "==> 发布版本: v$VERSION"
 # 2. 构建（含 update.zip）
 bash scripts/build-apk.sh
 
+# 2.5 更新包入库：jsDelivr 镜像源（game.js zipMirrorUrl）按 tag 取 update/update.zip，
+#     tag 指向 release 创建时的 HEAD，故必须在创建 release 之前提交
+cp update.zip update/update.zip
+git add -f update/update.zip
+git commit -m "chore: v$VERSION 更新包入库（jsDelivr 镜像源）" || echo "（update.zip 无变更，跳过提交）"
+
 # 3. 获取 GitHub token（git credential）
 TOKEN=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill 2>/dev/null | grep '^password=' | cut -d= -f2-)
 if [ -z "$TOKEN" ]; then echo "!! 无法获取 GitHub 凭据"; exit 1; fi

@@ -128,48 +128,109 @@ const Game = {
 
   // ════════════════════════════════════
   // 二·六、在线更新（@capgo/capacitor-updater + GitHub Release）
+  // v1.7.1 修复（移动端"检查更新不正常"）：
+  // ① 清单请求加 10s 超时（原实现无超时，被墙时挂死 → 按钮无响应）
+  // ② 清单/更新包均多源：GitHub 直链 + jsDelivr CDN 镜像（国内可达）
+  // ③ 全程反馈：按钮"检查中…"态；网页版/失败均弹窗提示（原为静默返回）
   // ════════════════════════════════════
 
-  // 更新清单固定地址（仓库 master 分支的 update/version.json，raw 直链）
-  UPDATE_MANIFEST_URL: 'https://raw.githubusercontent.com/chemmy-11/helios/master/update/version.json',
+  // 更新清单地址（raw 直链优先——始终最新；jsDelivr @master 有最长 12h 缓存，仅兜底）
+  MANIFEST_URLS: [
+    'https://raw.githubusercontent.com/chemmy-11/helios/master/update/version.json',
+    'https://cdn.jsdelivr.net/gh/chemmy-11/helios@master/update/version.json'
+  ],
+
+  // 更新包镜像：tag 内的 update/update.zip（publish-release.sh 发布时随 tag 入库）
+  zipMirrorUrl(version) {
+    return `https://cdn.jsdelivr.net/gh/chemmy-11/helios@v${version}/update/update.zip`;
+  },
+
+  // 带超时地抓取更新清单，逐源尝试
+  async fetchManifest() {
+    let lastErr = null;
+    for (const url of this.MANIFEST_URLS) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        const resp = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const m = await resp.json();
+        if (m && m.version && m.url) return m;
+        throw new Error('清单格式异常');
+      } catch (e) {
+        lastErr = e;
+        console.error('[HELIOS] 清单源不可达:', url, e.message);
+      }
+    }
+    throw lastErr || new Error('无可用更新源');
+  },
 
   // 检查更新：manual=false 为启动静默检查，manual=true 为玩家主动触发
   async checkForUpdates(manual) {
-    // 仅原生 App（Capacitor）环境启用；浏览器版直接跳过
-    if (!window.Capacitor || !window.Capacitor.isNativePlatform()) return;
+    // 网页版（浏览器/file://）无在线更新：给出明确提示而非静默无响应
+    if (!window.Capacitor || !window.Capacitor.isNativePlatform()) {
+      if (manual) this.showPhasePrompt('webNoUpdate');
+      return;
+    }
+    const btn = this.el.updateBtn;
+    if (manual && btn) {
+      btn.disabled = true;
+      btn.dataset.origText = btn.textContent;
+      btn.textContent = '⏳ 检查中…';
+    }
     try {
-      const resp = await fetch(this.UPDATE_MANIFEST_URL, { cache: 'no-store' });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const manifest = await resp.json();
+      const manifest = await this.fetchManifest();
       const local = typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.0.0';
       if (manifest.version && manifest.version !== local) {
         this.state.updateManifest = manifest;
         this.showPhasePrompt('updateAvailable');
       } else if (manual) {
-        // 弹窗提示（字幕在非对话视图不可见）
         this.showPhasePrompt('upToDate');
       }
     } catch (e) {
       console.error('[HELIOS] 更新检查失败:', e);
-      if (manual) this.showPhasePrompt('updateCheckFailed');
+      if (manual) {
+        this.state._updateError = (e && e.name === 'AbortError') ? '连接超时（10 秒）' : (e.message || '未知错误');
+        this.showPhasePrompt('updateCheckFailed');
+      }
+    } finally {
+      if (manual && btn) {
+        btn.disabled = false;
+        btn.textContent = btn.dataset.origText || '🔄 检查更新';
+      }
     }
   },
 
-  // 下载并应用更新包
+  // 下载并应用更新包（主源 GitHub Release，jsDelivr 镜像兜底）
   async applyUpdate(manifest) {
     const Updater = window.Capacitor?.Plugins?.CapacitorUpdater;
     if (!Updater) return;
+    const urls = [manifest.url];
+    if (manifest.version) urls.push(this.zipMirrorUrl(manifest.version));
     try {
       this.addDirectMessage('正在下载更新包...');
-      // capgo 6.x：download 必须显式传 version，否则报 "Download called without version"
-      const bundle = await Updater.download({ url: manifest.url, version: manifest.version });
+      let bundle = null, lastErr = null;
+      for (const url of urls) {
+        try {
+          // capgo 6.x：download 必须显式传 version，否则报 "Download called without version"
+          bundle = await Updater.download({ url, version: manifest.version });
+          break;
+        } catch (e) {
+          lastErr = e;
+          console.error('[HELIOS] 更新包下载失败:', url, e);
+        }
+      }
+      if (!bundle) throw lastErr || new Error('下载失败');
       // 用 next 而非 set：set 会立即销毁 JS 上下文（后续代码不执行），
       // next 在应用下次启动/进入后台时激活，不打断当前会话
       await Updater.next({ id: bundle.id });
       this.showPhasePrompt('updateDone');
     } catch (e) {
       console.error('[HELIOS] 更新下载失败:', e);
-      this.addDirectMessage('更新下载失败：' + (e.message || '未知错误') + '。请稍后重试。');
+      // 用弹窗而非对话区消息：玩家可能从抽屉触发，对话区不可见
+      this.state._updateError = e.message || '未知错误';
+      this.showPhasePrompt('updateFailed');
     }
   },
 
@@ -1884,16 +1945,36 @@ const Game = {
       btnOk1.textContent = '知道了';
       btnOk1.addEventListener('click', closeWith);
       actions.appendChild(btnOk1);
+    } else if (type === 'webNoUpdate') {
+      icon.textContent = '🌐';
+      title.textContent = '网页版无需更新';
+      body.textContent = '当前为网页运行环境，游戏已是最新。\n在线更新功能仅限 Android App。';
+      hint.textContent = '';
+      const btnOk0 = document.createElement('button');
+      btnOk0.className = 'phase-prompt-btn primary';
+      btnOk0.textContent = '知道了';
+      btnOk0.addEventListener('click', closeWith);
+      actions.appendChild(btnOk0);
     } else if (type === 'updateCheckFailed') {
       icon.textContent = '⚠️';
       title.textContent = '更新检查失败';
-      body.textContent = '无法连接更新服务器，请检查网络后重试。';
+      body.textContent = '无法连接更新服务器（' + (this.state._updateError || '未知错误') + '）。\n已尝试 GitHub 直链与镜像源。请检查网络后重试。';
       hint.textContent = '';
       const btnOk2 = document.createElement('button');
       btnOk2.className = 'phase-prompt-btn primary';
       btnOk2.textContent = '知道了';
       btnOk2.addEventListener('click', closeWith);
       actions.appendChild(btnOk2);
+    } else if (type === 'updateFailed') {
+      icon.textContent = '⚠️';
+      title.textContent = '更新下载失败';
+      body.textContent = '更新包下载失败（' + (this.state._updateError || '未知错误') + '）。\n可稍后重试，或到 GitHub Releases 页面重新下载 APK 安装。';
+      hint.textContent = '';
+      const btnOk5 = document.createElement('button');
+      btnOk5.className = 'phase-prompt-btn primary';
+      btnOk5.textContent = '知道了';
+      btnOk5.addEventListener('click', closeWith);
+      actions.appendChild(btnOk5);
     } else if (type === 'updateAvailable') {
       const manifest = this.state.updateManifest || {};
       icon.textContent = '🔄';
