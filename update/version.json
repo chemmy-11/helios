@@ -1,6 +1,6 @@
 {
-  "version": "1.6.7",
-  "url": "https://github.com/chemmy-11/helios/releases/download/v1.6.7/update.zip",
+  "version": "1.7.0",
+  "url": "https://github.com/chemmy-11/helios/releases/download/v1.7.0/update.zip",
   "required": false,
-  "changelog": "HELIOS 标题精确居中（不再受左右内容宽度影响）\n状态栏真实高度适配：原生 insets 注入，挖孔/刘海屏不再遮挡顶栏内容\n版本号贴右侧显示\n⚠️ 本版本含原生改动（MainActivity），需安装新 APK"
+  "changelog": "交互升级四件套\n📖 全新序章：任务简报 + 指挥官通讯 + 开场问卷，开局即入戏\n▸ 出示证据对质：交叉验证阶段可将线索当面出示给任何对话对象\n⇄ 证据板双选建立关联：亲手拼出 4 条推理结论\n🔎 话题雷达：调查阶段提示可问方向，随你的问话风格调整\n🔒 埋藏内容仍需自由提问挖出——雷达之外还有秘密\n（纯网页层更新，安装即生效，无需重装）"
 }
