@@ -34,6 +34,16 @@ const Game = {
     accusationUnlocked: false,  // 线索 ≥ 10 条 → true，解锁指控
     noAccusationUnlocked: false, // 线索 ≥ 20 条 → true，解锁不指控
     _p1RestNotified: false,     // Phase 1 休息提醒已弹窗过
+    prologueDone: false,        // 序章已完成/跳过（dev-brief-18）
+    prologueActive: false,      // 序章 overlay 进行中
+    openingBias: '',            // 序章选择：empathy / pressure / procedure（话题雷达排序）
+    openingIntuition: '',       // 序章选择：mech / ai / human / unsure（结局复盘回扣）
+    presentedConfrontations: {},// 对质记录 { [clueId]: [npcId, ...] }，每线索 × 每对象一次
+    radarTipShown: false,       // 话题雷达一次性说明已展示
+    linkTipShown: false,        // 证据关联一次性引导已展示
+    selectedClues: [],          // 证据板多选（运行时态，不存档）
+    _boardMsg: null,            // 证据板内联反馈（渲染一次后清除）
+    _prologueRead: null,        // 序章档案已读集合（运行时态）
   },
 
   el: {},  // DOM element cache
@@ -61,6 +71,7 @@ const Game = {
         this.el.dialogueArea.innerHTML = '<div class="msg system"><div class="msg-text">欢迎来到赫利俄斯站调查终端。<br>事故已发生。首席工程师重伤昏迷。<br>三台机器人在场。没有人承认过错。<br><br>从左侧选择地点移动，找到机器人开始你的调查。</div></div>';
       });
       this._safeStep('checkApiKey', () => this.checkApiKey());
+      this._safeStep('startPrologue', () => this.startPrologue());
       this._safeStep('renderVersion', () => {
         const ver = document.getElementById('mobile-version');
         if (ver) ver.textContent = 'v' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '');
@@ -637,6 +648,8 @@ const Game = {
       this.renderLogViewer(); // Re-render to unlock phase3 logs
       this.addDirectMessage('最终报告提交窗口已开放。当你做好准备，即可提交你的调查报告。');
     }
+    // 阶段切换后刷新对话选项区（话题雷达仅阶段一，需随阶段隐藏）
+    this.renderDialogueOptions();
   },
 
   showPhaseTransition(phase) {
@@ -886,7 +899,24 @@ const Game = {
     if (!data) { opts.innerHTML = ''; return; }
     
     let html = '';
-    
+
+    // 话题雷达（仅阶段一，dev-brief-18 §四）：意图词族的 UI 化，
+    // 排序受序章 openingBias 影响；SECRET / INFERENCE 不上雷达
+    if (this.state.phase === 1) {
+      const chips = this.getRadarTopics(npcId);
+      if (chips.length > 0) {
+        if (!this.state.radarTipShown) {
+          this.state.radarTipShown = true;
+          html += '<div class="typing-encouragement">话题雷达会提示可探测的方向。你随时可以问任何问题——雷达之外还有埋藏的内容。</div>';
+        }
+        html += '<div class="radar-topics">';
+        chips.forEach(e => {
+          html += `<button class="radar-chip" data-label="${e.radar_label}">▸ ${e.radar_label}</button>`;
+        });
+        html += '</div>';
+      }
+    }
+
     // Phase 2+: 指控区（10 条解锁指控 / 20 条解锁不指控 / 已指控消失）
     if (this.state.phase >= 2) {
       if (this.state.accusedNPCs.has(npcId)) {
@@ -918,6 +948,14 @@ const Game = {
       } else if (btn.dataset.noaccuse) {
         btn.addEventListener('click', () => this.initiateNoAccusation());
       }
+    });
+
+    // 话题雷达 chips：点击填入输入框（不自动发送，玩家可改后发送）
+    opts.querySelectorAll('.radar-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.el.playerInput.value = btn.dataset.label;
+        this.el.playerInput.focus();
+      });
     });
   },
 
@@ -1270,11 +1308,142 @@ const Game = {
     this.addDirectMessage(`[线索发现] ${clue.name} — ${clue.content}`);
     this.renderEvidenceBoard();
     this.renderTimeline();
+    this.renderDialogueOptions(); // 刷新话题雷达（已发现的线索对应 chip 消失）
   },
 
   // 有效证据数（排除 countsToward: false 的态度卡，dev-brief-17 7.5.6）
   countedClues() {
     return GAME_DATA.clues.filter(c => this.state.discoveredClues.has(c.id) && c.countsToward !== false).length;
+  },
+
+  // ════════════════════════════════════
+  // 九·一、话题雷达（dev-brief-18 §四，仅阶段一）
+  // ════════════════════════════════════
+
+  // 从 keyword_clue_map 派生当前 NPC 的可问话题（radar_label 已在 data 层配好）：
+  // 过滤已发现 + SECRET / INFERENCE；按 openingBias 类别排序；取前 3 条
+  getRadarTopics(npcId) {
+    if (this.state.phase !== 1) return [];
+    const catOrder = {
+      empathy: ['emotion', 'fact', 'logic'],
+      pressure: ['logic', 'fact', 'emotion'],
+      procedure: ['fact', 'logic', 'emotion']
+    };
+    const order = catOrder[this.state.openingBias] || ['fact', 'logic', 'emotion'];
+    const seen = new Set();
+    const topics = [];
+    (GAME_DATA.keyword_clue_map || []).forEach(e => {
+      if (!e.radar_label || seen.has(e.clue)) return;
+      const clue = GAME_DATA.clues.find(c => c.name === e.clue);
+      if (!clue) return;
+      if (this.state.discoveredClues.has(clue.id)) return;
+      if (clue.type === 'SECRET' || clue.type === 'INFERENCE') return;
+      if (!clue.source.startsWith(npcId)) return;
+      seen.add(e.clue);
+      topics.push(e);
+    });
+    topics.sort((a, b) => order.indexOf(a.radar_cat) - order.indexOf(b.radar_cat));
+    return topics.slice(0, 3);
+  },
+
+  // ════════════════════════════════════
+  // 九·二、出示证据对质（dev-brief-18 §二）
+  // 阶段二解锁；每线索 × 每对象一次；对质指令仅拼进本次 LLM 调用，
+  // 不写 agent_prompt、不进共享记忆；不触发关键词线索检测（防出示文本误触发）。
+  // ════════════════════════════════════
+
+  async confrontWithClue(clueId) {
+    const clue = GAME_DATA.clues.find(c => c.id === clueId);
+    if (!clue) return;
+    if (this.state.phase < 2) {
+      this.addDirectMessage('[对质] 出示证据将在交叉验证阶段解锁。');
+      return;
+    }
+    const npcId = this.state.currentNPC;
+    if (!npcId) {
+      this.addDirectMessage('[对质] 请先在对话终端选择一个对话对象。');
+      return;
+    }
+    const data = GAME_DATA.dialogue[npcId];
+    if (!data) return;
+    const presented = this.state.presentedConfrontations[clue.id] = this.state.presentedConfrontations[clue.id] || [];
+    if (presented.includes(npcId)) {
+      this.addDirectMessage(`[对质] 你已经就「${clue.name}」向${data.npc}出示过证据。`);
+      return;
+    }
+    presented.push(npcId);
+
+    this.switchView('terminal');
+    const div = document.createElement('div');
+    div.className = 'msg system';
+    div.innerHTML = `<div class="msg-text" style="color:var(--accent-amber);">你向 ${data.npc} 出示了线索「${clue.name}」：${this.escape(clue.content)}</div>`;
+    this.el.dialogueArea.appendChild(div);
+    this.el.dialogueArea.scrollTop = this.el.dialogueArea.scrollHeight;
+    // 以 player 角色入史：LLM 后续轮次记得被对质过（历史重放显示为玩家消息）
+    this.state.conversations[npcId].push({ role: 'player', text: `（出示证据——「${clue.name}」）${clue.content}` });
+
+    this.showTypingIndicator(npcId);
+    try {
+      const base = this.injectSharedContext(data.agent_prompt, npcId);
+      const withFacts = this.injectClueFacts(base, npcId);
+      const directive =
+        '\n\n[对质指令 — 仅本次调用生效]\n' +
+        `调查员刚刚向你出示了以下记录/证词：「${clue.name}」——${clue.content}\n` +
+        '要求你当场回应。你必须：\n' +
+        '1. 在你的知识边界内回应；若超出你的知识或感知，如实表示无法核实，不得确认或否认你不了解的事；\n' +
+        '2. 保持 FIRMWARE 与你既有的证词口径一致；若该记录与你此前陈述冲突，表现出动摇/辩解/修正，而不是立刻全盘承认；\n' +
+        '3. 回应保持 2-4 句，符合你的性格特质。';
+      const response = await this.callLLM(withFacts + directive, npcId, `我向你出示这份证据——「${clue.name}」：${clue.content}。请你解释。`);
+      this.removeTypingIndicator();
+      this.appendNPCMessage(npcId, response);
+      this.state.conversations[npcId].push({ role: 'npc', text: response });
+      if (npcId === 'S-3' && response.includes('我AI') && !this.state.s3SaidILove) {
+        this.state.s3SaidILove = true;
+      }
+    } catch (e) {
+      this.removeTypingIndicator();
+      console.error('[HELIOS] 对质 LLM 失败:', e);
+      const fallback = '...[通讯干扰，请稍后重试]...';
+      this.appendNPCMessage(npcId, fallback);
+      this.state.conversations[npcId].push({ role: 'npc', text: fallback, isSystem: true });
+    }
+    this.renderDialogueOptions();
+  },
+
+  // ════════════════════════════════════
+  // 九·三、线索关联合成（dev-brief-18 §三）
+  // 4 张 INFERENCE 卡唯一解锁路径：证据板选中两张 → 命中 clue_linkage 组合。
+  // ════════════════════════════════════
+
+  toggleClueSelection(clueId) {
+    const list = this.state.selectedClues;
+    const idx = list.indexOf(clueId);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      if (list.length >= 2) list.shift(); // 已满两张：滑出最早一张
+      list.push(clueId);
+    }
+    this.renderEvidenceBoard();
+  },
+
+  tryLinkClues() {
+    if (this.state.selectedClues.length !== 2) return;
+    const [a, b] = this.state.selectedClues;
+    const hit = (GAME_DATA.clue_linkage || []).find(l => l.pair.includes(a) && l.pair.includes(b));
+    this.state.selectedClues = [];
+    if (hit) {
+      const result = GAME_DATA.clues.find(c => c.id === hit.result);
+      // discoverClue 内部会先重渲染一次证据板，_boardMsg 须在其后设置才能显示
+      this.discoverClue(hit.result, '玩家关联推理');
+      this.state._boardMsg = `[推理达成] 你把两条线索拼在了一起——「${result ? result.name : hit.result}」已写入证据板。`;
+    } else if (!this.state.linkTipShown) {
+      this.state.linkTipShown = true;
+      this.state._boardMsg = '[关联] 关联度不足。\n💡 部分线索之间存在深层联系。把相关的线索两两放到一起，也许能拼出新的结论。';
+    } else {
+      this.state._boardMsg = '[关联] 关联度不足……这两条线索之间还缺一环。';
+    }
+    this.renderEvidenceBoard();
   },
 
   // Check player's free-text input for keyword clues (soft track clue unlock)
@@ -1350,6 +1519,7 @@ const Game = {
   },
 
   // 重写：证据板渲染 + 证据-日志关联面板（P2）
+  // v1.7.0（dev-brief-18）：+ 出示对质按钮 + 多选关联合成 + 内联反馈
   renderEvidenceBoard() {
     const board = this.el.evidenceBoard;
     if (!board) return;
@@ -1359,19 +1529,37 @@ const Game = {
 
     let html = `<div class="evidence-stats">已发现: <span>${discovered.length}</span> / ${GAME_DATA.clues.length}</div>`;
 
+    // 关联玩法说明 + 内联反馈（推理达成 / 关联度不足）
+    if (this.state._boardMsg) {
+      html += `<div class="board-msg">${this.escape(this.state._boardMsg)}</div>`;
+      this.state._boardMsg = null;
+    }
+    if (this.state.selectedClues.length === 2) {
+      html += `<div class="link-bar"><span>已选 2 条线索</span><button class="clue-btn link-btn" data-act="link">⇄ 建立关联</button><button class="clue-btn" data-act="clearsel">取消选择</button></div>`;
+    } else if (this.state.selectedClues.length === 1) {
+      html += `<div class="link-bar"><span>已选 1 条线索 — 再选一条即可尝试建立关联</span><button class="clue-btn" data-act="clearsel">取消选择</button></div>`;
+    }
+
     if (discovered.length > 0) {
       html += '<div style="margin:8px 0 4px;font-size:11px;color:var(--text-dim);text-transform:uppercase;">已确认线索</div>';
       discovered.forEach(clue => {
         const hasRelated = (clue.related_logs && clue.related_logs.length) || (clue.related_dialogues && clue.related_dialogues.length);
         const q = this.state.clueQuotes[clue.id];
         const quoteHtml = q ? '<div class="clue-quote">对话摘录：\u201c' + q.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '\u201d</div>' : '';
+        const isSelected = this.state.selectedClues.includes(clue.id);
+        const presented = (this.state.presentedConfrontations[clue.id] || []);
+        const confrontDisabled = this.state.phase < 2;
+        const confrontLabel = confrontDisabled ? '🔒 对质 · 交叉验证阶段解锁' : '▸ 出示对质';
         html += `
-          <div class="clue-card confirmed${hasRelated ? ' has-related' : ''}" data-clue="${clue.id}">
+          <div class="clue-card confirmed${hasRelated ? ' has-related' : ''}${isSelected ? ' selected' : ''}" data-clue="${clue.id}">
             <div class="clue-type">${clue.type}</div>
             <div class="clue-name">${clue.name}</div>
             <div class="clue-source">来源: ${clue.source}</div>
             <div class="clue-content">${clue.content}</div>
             ${quoteHtml}
+            <div class="clue-actions">
+              <button class="clue-btn confront-btn" data-confront="${clue.id}"${confrontDisabled ? ' disabled' : ''}>${confrontLabel}</button>
+            </div>
             ${hasRelated ? '<div class="clue-related-toggle">▸ 查看关联证据</div>' : ''}
             ${hasRelated ? '<div class="clue-related" style="display:none;">' + this.renderClueRelated(clue) + '</div>' : ''}
           </div>
@@ -1404,6 +1592,32 @@ const Game = {
         const related = card.querySelector('.clue-related');
         if (related) related.style.display = wasExpanded ? 'none' : 'block';
         toggle.textContent = wasExpanded ? '▸ 查看关联证据' : '▾ 收起关联证据';
+      });
+    });
+
+    // 出示对质按钮
+    board.querySelectorAll('.confront-btn:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.confrontWithClue(btn.dataset.confront);
+      });
+    });
+
+    // 关联操作栏
+    const linkBtn = board.querySelector('[data-act="link"]');
+    if (linkBtn) linkBtn.addEventListener('click', (e) => { e.stopPropagation(); this.tryLinkClues(); });
+    const clearBtn = board.querySelector('[data-act="clearsel"]');
+    if (clearBtn) clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.state.selectedClues = [];
+      this.renderEvidenceBoard();
+    });
+
+    // 卡片点击 = 选中/取消（多选关联）；点在按钮/折叠区时不触发
+    board.querySelectorAll('.clue-card.confirmed').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('.clue-related-toggle')) return;
+        this.toggleClueSelection(card.dataset.clue);
       });
     });
   },
@@ -1729,12 +1943,183 @@ const Game = {
   },
 
   // ════════════════════════════════════
+  // 十一·七、阶段零 · 序章（dev-brief-18 §五）
+  // 独立 overlay 流程，不改 phase 枚举。跳过规则三层：
+  // ① state.prologueDone ② localStorage 标记 ③ hasProgress()（旧档/续玩）
+  // ════════════════════════════════════
+
+  startPrologue() {
+    if (this.state.prologueDone) return;
+    try {
+      if (localStorage.getItem('helios_prologue_done') === 'true') {
+        this.state.prologueDone = true;
+        return;
+      }
+    } catch (e) {}
+    if (this.hasProgress()) {
+      this.state.prologueDone = true;
+      return;
+    }
+    const ov = document.getElementById('prologue-overlay');
+    if (!ov) return;
+    this.state.prologueActive = true;
+    this.state._prologueRead = new Set();
+    ov.classList.add('show');
+    this.renderPrologueBoot();
+  },
+
+  _renderPrologueBeat(html) {
+    const box = document.getElementById('prologue-box');
+    if (!box) return;
+    box.innerHTML = `<div class="prologue-skip">跳过序章 ▸</div>` + html;
+    box.querySelector('.prologue-skip').addEventListener('click', () => this.finishPrologue());
+    box.scrollTop = 0;
+  },
+
+  // Beat 0 · 终端启动序列：逐行显现，自动进入简报
+  renderPrologueBoot() {
+    const lines = GAME_DATA.prologue.bootLines;
+    let html = '<div class="prologue-boot">';
+    lines.forEach((line, i) => {
+      html += `<div class="prologue-boot-line" style="animation-delay:${i * 0.7}s">${this.escape(line)}</div>`;
+    });
+    html += '</div>';
+    this._renderPrologueBeat(html);
+    clearTimeout(this._prologueTimer);
+    this._prologueTimer = setTimeout(() => {
+      if (this.state.prologueActive) this.renderPrologueFiles();
+    }, lines.length * 700 + 1200);
+  },
+
+  // Beat 1 · 任务简报档案夹：除必读项外可跳读；读完事故通报才能继续
+  renderPrologueFiles() {
+    const read = this.state._prologueRead = this.state._prologueRead || new Set();
+    let html = `<div class="prologue-title">${this.escape(GAME_DATA.prologue.briefingTitle)}</div>`;
+    html += '<div class="prologue-hint">点击档案查看内容。通报读完即可继续。</div>';
+    html += '<div class="prologue-files">';
+    GAME_DATA.prologue.files.forEach(f => {
+      const isOpen = read.has(f.id);
+      html += `
+        <div class="prologue-file${f.encrypted ? ' encrypted' : ''}${isOpen ? ' open' : ''}" data-file="${f.id}">
+          <div class="prologue-file-name">${f.required ? '<span class="file-required">[必读]</span> ' : ''}${this.escape(f.name)}${!read.has(f.id) ? '<span class="file-badge">●</span>' : ''}</div>
+          <div class="prologue-file-body">${this.escape(f.body)}</div>
+        </div>`;
+    });
+    html += '</div>';
+    html += `<div class="prologue-actions"><button class="phase-prompt-btn primary" data-act="continue"${read.has('accident') ? '' : ' disabled'}>继续 ▸</button></div>`;
+    this._renderPrologueBeat(html);
+
+    const box = document.getElementById('prologue-box');
+    box.querySelectorAll('.prologue-file').forEach(card => {
+      card.addEventListener('click', () => {
+        const fid = card.dataset.file;
+        const isOpen = card.classList.contains('open');
+        if (isOpen) {
+          card.classList.remove('open');
+        } else {
+          card.classList.add('open');
+          read.add(fid);
+          card.querySelector('.file-badge')?.remove();
+          if (fid === 'accident') {
+            const btn = box.querySelector('[data-act="continue"]');
+            if (btn) btn.disabled = false;
+          }
+        }
+      });
+    });
+    box.querySelector('[data-act="continue"]')?.addEventListener('click', () => {
+      if (read.has('accident')) this.renderPrologueCommander();
+    });
+  },
+
+  // Beat 2 · 指挥官通讯：不可跳过的伪对话（整段序章仍可跳过）
+  renderPrologueCommander() {
+    let html = '<div class="prologue-title">加密频道 · 地球伦理部</div><div class="prologue-msgs" id="prologue-msgs"></div>';
+    html += `<div class="prologue-actions" id="prologue-cmdr-actions"></div>`;
+    this._renderPrologueBeat(html);
+    const wrap = document.getElementById('prologue-msgs');
+    const msgs = GAME_DATA.prologue.commanderMsgs;
+    msgs.forEach((m, i) => {
+      setTimeout(() => {
+        if (!this.state.prologueActive) return;
+        const div = document.createElement('div');
+        div.className = 'prologue-msg';
+        div.textContent = m;
+        wrap.appendChild(div);
+        const box = document.getElementById('prologue-box');
+        if (box) box.scrollTop = box.scrollHeight;
+        if (i === msgs.length - 1) {
+          const actions = document.getElementById('prologue-cmdr-actions');
+          if (actions) {
+            const btn = document.createElement('button');
+            btn.className = 'phase-prompt-btn primary';
+            btn.textContent = '接受任务 ▸';
+            btn.addEventListener('click', () => this.renderPrologueQuiz());
+            actions.appendChild(btn);
+          }
+        }
+      }, 700 + i * 1400);
+    });
+  },
+
+  // Beat 3 · 开场问卷：Q1 初始直觉（复盘回扣）+ Q2 问话风格（雷达排序）
+  renderPrologueQuiz(qIndex = 0) {
+    const quiz = GAME_DATA.prologue.quiz;
+    if (qIndex >= quiz.length) {
+      this.renderPrologueArrival();
+      return;
+    }
+    const q = quiz[qIndex];
+    let html = `<div class="prologue-title">调查员登记表</div>`;
+    html += `<div class="prologue-quiz-q">${this.escape(q.title)}</div><div class="prologue-quiz-opts">`;
+    q.options.forEach(o => {
+      html += `<button class="prologue-quiz-opt" data-key="${q.key}" data-value="${o.value}"><span class="opt-label">${this.escape(o.label)}</span><span class="opt-desc">${this.escape(o.desc)}</span></button>`;
+    });
+    html += '</div>';
+    this._renderPrologueBeat(html);
+
+    document.querySelectorAll('#prologue-box .prologue-quiz-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#prologue-box .prologue-quiz-opt').forEach(b => { b.disabled = true; b.classList.remove('picked'); });
+        btn.classList.add('picked');
+        this.state[btn.dataset.key === 'intuition' ? 'openingIntuition' : 'openingBias'] = btn.dataset.value;
+        setTimeout(() => this.renderPrologueQuiz(qIndex + 1), 500);
+      });
+    });
+  },
+
+  // Beat 4 · 抵达：黑屏转场 → 进入阶段一
+  renderPrologueArrival() {
+    let html = '<div class="prologue-arrival">';
+    GAME_DATA.prologue.arrivalText.forEach((line, i) => {
+      html += `<div class="prologue-arrival-line" style="animation-delay:${0.3 + i * 1.1}s">${this.escape(line)}</div>`;
+    });
+    html += '</div>';
+    this._renderPrologueBeat(html);
+    clearTimeout(this._prologueTimer);
+    this._prologueTimer = setTimeout(() => {
+      if (this.state.prologueActive) this.finishPrologue();
+    }, 3800);
+  },
+
+  finishPrologue() {
+    this.state.prologueDone = true;
+    this.state.prologueActive = false;
+    this.state._prologueRead = null;
+    clearTimeout(this._prologueTimer);
+    try { localStorage.setItem('helios_prologue_done', 'true'); } catch (e) {}
+    const ov = document.getElementById('prologue-overlay');
+    if (ov) ov.classList.remove('show');
+    this.showPhaseTransition(1);
+  },
+
+  // ════════════════════════════════════
   // 十一·六、存档系统（第二波）
   // ════════════════════════════════════
 
   serializeState() {
     return {
-      version: 1,
+      version: 2,
       timestamp: Date.now(),
       phase: this.state.phase,
       currentLocation: this.state.currentLocation,
@@ -1755,7 +2140,14 @@ const Game = {
       accusationUnlocked: this.state.accusationUnlocked,
       noAccusationUnlocked: this.state.noAccusationUnlocked,
       dataSubTab: this.state.dataSubTab,
-      reportDraft: this.state.reportDraft || ''
+      reportDraft: this.state.reportDraft || '',
+      // dev-brief-18：序章 / 对质 / 雷达状态
+      prologueDone: this.state.prologueDone,
+      openingBias: this.state.openingBias || '',
+      openingIntuition: this.state.openingIntuition || '',
+      presentedConfrontations: JSON.parse(JSON.stringify(this.state.presentedConfrontations || {})),
+      radarTipShown: !!this.state.radarTipShown,
+      linkTipShown: !!this.state.linkTipShown
     };
   },
 
@@ -1783,6 +2175,16 @@ const Game = {
     if (this.countedClues() >= 20) this.state.noAccusationUnlocked = true;
     this.state.dataSubTab = save.dataSubTab || 'logs';
     this.state.reportDraft = save.reportDraft || '';
+    // dev-brief-18：旧档（version 1 / 缺字段）视为已跳过序章
+    this.state.prologueDone = save.prologueDone !== undefined ? !!save.prologueDone : true;
+    this.state.openingBias = save.openingBias || '';
+    this.state.openingIntuition = save.openingIntuition || '';
+    this.state.presentedConfrontations = save.presentedConfrontations ? JSON.parse(JSON.stringify(save.presentedConfrontations)) : {};
+    this.state.radarTipShown = !!save.radarTipShown;
+    this.state.linkTipShown = !!save.linkTipShown;
+    // 清理运行时态（读档后不继承旧会话的证据板多选/内联反馈）
+    this.state.selectedClues = [];
+    this.state._boardMsg = null;
     // 同步线索 discovered 标记
     GAME_DATA.clues.forEach(c => {
       c.discovered = this.state.discoveredClues.has(c.id);
@@ -2018,6 +2420,7 @@ const Game = {
     
     const processNextStep = () => {
       if (stepIndex >= ending.sequence.length) {
+        this.appendReviewHook(textArea); // 序章初始直觉 → 结局复盘回扣（dev-brief-18 §5.3）
         if (ending.type === 'success' || ending.type === 'wai') {
           // 大成功结局：字幕 → 四定律 → THE END → 按钮（全部在 showSuccessCredits 中完成）
           setTimeout(() => this.showSuccessCredits(textArea), 2000);
@@ -2161,6 +2564,20 @@ const Game = {
     };
     
     processNextStep();
+  },
+
+  // 序章初始直觉 → 结局复盘回扣（dev-brief-18 §5.3）：
+  // 结局 sequence 播完、credits 之前插入固定一行；未走序章（openingIntuition 为空）不插
+  appendReviewHook(textArea) {
+    if (!this.state.openingIntuition) return;
+    const label = (GAME_DATA.prologue && GAME_DATA.prologue.intuitionLabels[this.state.openingIntuition]) ||
+      { mech: '机械故障', ai: '机器人误判', human: '人为疏忽', unsure: '尚不确定' }[this.state.openingIntuition];
+    if (!label) return;
+    const p = document.createElement('div');
+    p.style.cssText = 'margin-top:24px;font-style:italic;color:var(--accent-amber);text-align:center;white-space:pre-wrap;';
+    p.textContent = `档案回执：你在任务简报中勾选的初始直觉是「${label}」。\n现在，你的报告已经给出了答案。同一个吗？`;
+    textArea.appendChild(p);
+    this.el.endingScreen.scrollTop = this.el.endingScreen.scrollHeight;
   },
 
   getSacrificeText(npcId, endingType) {

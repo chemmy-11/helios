@@ -1805,3 +1805,222 @@ body {
   justify-content: center;
   margin-top: 8px;
 }
+
+/* === PROLOGUE 阶段零（dev-brief-18）=== */
+#prologue-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-deep);
+  z-index: 6000; /* phase-prompt(5000) 之上、api-key-modal(10000) 之下 */
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+#prologue-overlay.show { display: flex; }
+
+.prologue-box {
+  position: relative;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius);
+  padding: 28px 30px;
+  max-width: 680px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  animation: phase-prompt-in 0.3s ease-out;
+}
+
+.prologue-skip {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.prologue-skip:hover { color: var(--accent-amber); }
+
+.prologue-boot { padding: 40px 0 30px; }
+.prologue-boot-line {
+  font-size: 13px;
+  color: var(--data-cyan);
+  margin: 8px 0;
+  opacity: 0;
+  animation: prologue-line-in 0.5s ease-out forwards;
+}
+@keyframes prologue-line-in { to { opacity: 1; } }
+
+.prologue-title {
+  font-size: 15px;
+  color: var(--accent-amber);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.prologue-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.prologue-files {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.prologue-file {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  background: var(--bg-highlight);
+}
+.prologue-file:hover { border-color: var(--border-bright); }
+.prologue-file.open { border-color: var(--accent-amber); }
+.prologue-file-name {
+  font-size: 13px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-required { color: var(--danger-red); font-size: 11px; }
+.file-badge { color: var(--accent-amber); font-size: 10px; margin-left: auto; }
+.prologue-file-body {
+  display: none;
+  white-space: pre-wrap;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--text-main);
+  border-top: 1px dashed var(--border);
+  margin-top: 8px;
+  padding-top: 10px;
+}
+.prologue-file.open .prologue-file-body { display: block; }
+.prologue-file.encrypted .prologue-file-body { color: var(--text-dim); }
+
+.prologue-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.prologue-msgs { margin: 12px 0 4px; }
+.prologue-msg {
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text-main);
+  border-left: 2px solid var(--accent-amber);
+  padding: 6px 12px;
+  margin: 10px 0;
+  background: rgba(232, 165, 64, 0.05);
+  animation: prologue-line-in 0.5s ease-out;
+}
+
+.prologue-quiz-q {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-main);
+  margin: 14px 0 12px;
+}
+.prologue-quiz-opts { display: flex; flex-direction: column; gap: 8px; }
+.prologue-quiz-opt {
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-main);
+  padding: 9px 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.prologue-quiz-opt:hover:not(:disabled) { border-color: var(--accent-amber); }
+.prologue-quiz-opt.picked { border-color: var(--accent-amber); color: var(--accent-amber); }
+.prologue-quiz-opt:disabled { opacity: 0.55; cursor: default; }
+.opt-label { font-size: 13px; }
+.opt-desc { font-size: 11px; color: var(--text-dim); }
+
+.prologue-arrival {
+  padding: 70px 0 50px;
+  text-align: center;
+}
+.prologue-arrival-line {
+  font-size: 14px;
+  color: var(--text-main);
+  margin: 12px 0;
+  letter-spacing: 1px;
+  opacity: 0;
+  animation: prologue-line-in 0.8s ease-out forwards;
+}
+
+/* === 话题雷达（dev-brief-18 §四）=== */
+.radar-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+.radar-chip {
+  border: 1px solid rgba(78, 205, 196, 0.4);
+  color: var(--data-cyan);
+  background: rgba(78, 205, 196, 0.06);
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  transition: all 0.2s;
+}
+.radar-chip:hover { border-color: var(--data-cyan); background: rgba(78, 205, 196, 0.14); }
+
+/* === 证据板：对质 / 关联合成（dev-brief-18 §二·三）=== */
+.clue-card.selected {
+  border-color: var(--accent-amber);
+  box-shadow: inset 0 0 0 1px var(--accent-amber);
+}
+.clue-actions { margin-top: 8px; display: flex; gap: 8px; }
+.clue-btn {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-dim);
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+.clue-btn:hover:not(:disabled) { border-color: var(--accent-amber); color: var(--accent-amber); }
+.clue-btn:disabled { opacity: 0.45; cursor: default; }
+.clue-btn.confront-btn { color: var(--accent-amber); border-color: rgba(232, 165, 64, 0.4); }
+.clue-btn.link-btn { border-color: var(--accent-amber); color: var(--accent-amber); }
+.link-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px dashed var(--accent-amber);
+  border-radius: var(--radius);
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--accent-amber);
+}
+.board-msg {
+  border: 1px solid var(--visited-green);
+  background: rgba(107, 142, 122, 0.08);
+  color: var(--text-main);
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  border-radius: var(--radius);
+}

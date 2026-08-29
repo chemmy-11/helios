@@ -531,3 +531,13 @@
     display: none !important;
   }
 }
+
+/* === dev-brief-18：序章 / 话题雷达 / 证据板操作 移动端适配 === */
+.prologue-box {
+  max-height: 92vh;
+  padding: 22px 16px;
+}
+.prologue-files { grid-template-columns: 1fr; }
+.radar-chip { font-size: 11px; padding: 5px 10px; }
+.link-bar { flex-wrap: wrap; }
+.clue-actions { flex-wrap: wrap; }
