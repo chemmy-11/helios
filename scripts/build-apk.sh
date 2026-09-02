@@ -9,12 +9,16 @@ export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Java/jdk-17}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 echo "==> 1/5 同步 www（根目录 → www/）"
+# 全新 checkout 环境无 www/（被 .gitignore），先建目录
+mkdir -p www
 cp index.html www/index.html
 cp -r css/. www/css/
 cp -r js/. www/js/
 
-echo "==> 2/5 cap copy android"
-npx cap copy android
+echo "==> 2/5 cap sync android"
+# sync（非 copy）：会生成 capacitor-cordova-android-plugins 桥接目录，
+# 该目录不入库而 settings.gradle include 它 —— 全新环境仅 copy 会导致 gradle 失败
+npx cap sync android
 
 echo "==> 3/5 gradle assembleDebug"
 (cd android && ./gradlew assembleDebug)
