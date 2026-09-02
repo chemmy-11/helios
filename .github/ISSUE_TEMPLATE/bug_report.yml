@@ -1,0 +1,74 @@
+name: 🐛 缺陷报告
+description: 报告游戏 Bug —— 对话异常、线索/阶段/结局问题、移动端布局、更新失败等
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！**版本号 + 端 + 复现步骤**是定位问题的关键。
+
+        ⚠️ **隐私提示**：本仓库公开 —— 截图/日志里**不要包含你的 DeepSeek API Key**（sk- 开头）或任何个人信息。
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 端
+      options:
+        - Web 浏览器（桌面）
+        - Android APK
+        - 两者都出现
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题板块
+      options:
+        - 对话 / AI 回复异常
+        - 线索 / 证据板
+        - 阶段推进 / 指控
+        - 结局 / 复盘
+        - 移动端布局 / 键盘
+        - 存档
+        - 开场 / 序章 / CG
+        - 在线更新（OTA）
+        - 安装 / 构建
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 顶栏右侧或侧栏可见；OTA 更新后的版本以实际为准
+      placeholder: "如 1.7.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 新开档 / 载入存档，进行到…
+        2. 对 R-7 说…
+        3. 出现…
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象与期望
+      description: 实际发生了什么？你期望发生什么？（涉及 AI 回复请贴原话）
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 截图 / 控制台报错 / 补充信息
+      description: Web 端可按 F12 → Console 截图；再次提醒勿含 API Key
+      placeholder: （可选）

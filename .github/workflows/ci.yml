@@ -1,0 +1,108 @@
+# HELIOS CI（chemmy-11/helios · master）
+# 检查项与 docs/github-maintenance.md 的发布规范对应：
+#   check job:
+#     ① scripts/check.sh —— JS 语法 + 已移除符号残留引用（APK 一致性段在 CI 无 APK 时自动跳过）
+#     ② 版本守卫 —— js/version.js（开发版）必须 ≥ update/version.json（已发布 OTA 版本）
+#     ③ OTA 清单自洽 —— version.json 的 url tag 与 version 字段一致、字段完整
+#   android-build job:
+#     内联安装 Capacitor 依赖（package.json 不入库）→ scripts/build-apk.sh 完整构建
+#     （www 同步 → cap copy → assembleDebug → md5 逐字节校验 → update.zip）→ 上传 APK + update.zip 产物
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: # 支持手动触发
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true # 同分支新推送取消旧构建
+
+jobs:
+  check:
+    name: 静态检查（语法 / 残留 / 版本 / OTA 清单）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: ① check.sh（语法 + 残留引用）
+        run: bash scripts/check.sh
+
+      - name: ② 版本守卫（version.js ≥ version.json）
+        run: |
+          JS_VER=$(sed -n "s/.*APP_VERSION = '\([^']*\)'.*/\1/p" js/version.js)
+          OTA_VER=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' update/version.json)
+          NEWEST=$(printf '%s\n' "$JS_VER" "$OTA_VER" | sort -V | tail -1)
+          echo "开发版 version.js=$JS_VER | 已发布 OTA version.json=$OTA_VER"
+          if [ "$NEWEST" != "$JS_VER" ]; then
+            echo "!! version.json（$OTA_VER）比 version.js（$JS_VER）还新 —— OTA 清单不应超前于代码"; exit 1
+          fi
+
+      - name: ③ OTA 清单自洽检查
+        run: |
+          node -e "
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('update/version.json', 'utf8'));
+          for (const k of ['version', 'url', 'required', 'changelog']) {
+            if (!(k in m)) { console.error('version.json 缺少字段: ' + k); process.exit(1); }
+          }
+          if (!m.url.includes('releases/download/v' + m.version + '/update.zip')) {
+            console.error('url 与 version 不匹配: ' + m.url + ' 应指向 v' + m.version); process.exit(1);
+          }
+          console.log('OTA 清单自洽: v' + m.version + '（url tag 一致）');
+          "
+
+  android-build:
+    name: Android 构建（Debug APK + update.zip）
+    runs-on: ubuntu-latest
+    needs: check # 静态检查不过不浪费构建时间
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # package.json 被 .gitignore（不入库），CI 内联安装同样的依赖集
+      - name: 安装 Capacitor 依赖
+        run: |
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund \
+            @capacitor/cli@^6.2.1 \
+            @capacitor/core@^6.2.1 \
+            @capacitor/android@^6.2.1 \
+            @capacitor/app@^6.0.3 \
+            @capacitor/keyboard@^6.0.4 \
+            @capacitor/status-bar@^6.0.3 \
+            @capgo/capacitor-updater@^6.50.2
+
+      - name: 提供 python 命令（build 脚本使用）
+        run: sudo ln -sf "$(command -v python3)" /usr/local/bin/python
+
+      - name: 赋予 gradlew 可执行权限
+        run: chmod +x android/gradlew
+
+      # build-apk.sh 内 JAVA_HOME 取 ${JAVA_HOME:-C:/...}，CI 已由 setup-java 设置
+      - name: 构建（复用 scripts/build-apk.sh）
+        run: bash scripts/build-apk.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: helios-build
+          path: |
+            HELIOS.apk
+            update.zip
+          retention-days: 14

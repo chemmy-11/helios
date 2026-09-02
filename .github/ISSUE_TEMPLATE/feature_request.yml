@@ -1,0 +1,49 @@
+name: ✨ 功能建议
+description: 新玩法、新机制、体验改进
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        大方向的想法也可以先看 README 的「核心特色」与 `dev-briefs/` 的演进记录，避免重复提报。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 建议板块
+      options:
+        - 对话与 AI 表现
+        - 线索 / 证据板机制
+        - 阶段推进 / 节奏
+        - 结局 / 复盘
+        - 界面 / 视觉 / 移动端体验
+        - 存档与多周目
+        - 更新 / 安装体验
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决的问题或场景
+      description: 现在什么体验让你觉得差点意思？期望变成什么样？
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案
+      description: 大概想法即可，不必是技术方案
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 改动范围预估（多选）
+      description: 帮助判断发布通道（见 README：web 层可在线更新，native 层需重装 APK）
+      options:
+        - label: 涉及线索/结局数据（js/data.js）
+        - label: 涉及对话/判定逻辑（js/game.js）
+        - label: 涉及界面样式（css/、index.html）
+        - label: 涉及原生层（android/、Capacitor 插件 —— 只能随 APK 发布）

@@ -31,3 +31,6 @@ www/
 .vscode/
 *.swp
 update.zip
+
+# ZCode 会话工作目录
+.zcode/

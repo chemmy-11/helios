@@ -163,3 +163,46 @@ update.zip                   # 更新包：js/ + css/ + index.html（web 资产�
 | `publish-release.sh` | 全自动发布（见第 5 节） |
 | `add-firmware-prompts.js` / `update-robot-prompts.js` | 机器人 System Prompt 维护 |
 | `refactor-pure-llm.js` | LLM 化重构辅助 |
+| `verify-*.js` | 各 dev-brief 的回归验证脚本（mock fetch/Capacitor，node 直跑） |
+
+---
+
+## 9. Issue 规范（`.github/ISSUE_TEMPLATE/`）
+
+已启用 GitHub Forms（**关闭空白 Issue**），两个模板：
+
+| 模板 | 用途 | 关键字段 |
+|---|---|---|
+| 🐛 缺陷报告 | 游戏 Bug | 端（Web/APK）/ 问题板块（对话/线索/阶段/结局/移动端/存档/OTA/构建）/ 版本号 / 复现步骤 |
+| ✨ 功能建议 | 新玩法 / 改进 | 板块 / 场景 / 期望方案 / 改动范围预估（对应发布通道） |
+
+约定：
+
+- 标题格式沿用提交信息风格：`类型: 一句话描述`（如 `bug: 移动端指控后证据板不刷新`）。
+- **公开仓库隐私红线**：截图/日志不得包含 DeepSeek API Key（sk- 开头）与个人信息——模板内已提示。
+- Label：`bug` / `enhancement` 为模板自带；其余按板块补（`移动端`、`OTA`、`AI表现` 等）。
+- 生命周期：修复 commit 引用 `#N` → 关闭前留结论 comment（根因 + 修复提交 + 验证方式）→ close。
+
+## 10. PR 规范（`.github/PULL_REQUEST_TEMPLATE.md`）
+
+主流程仍是 **master 单分支直推**（§1）；需要留评审痕迹的较大改动走 `feat/<简述>` / `fix/<简述>` 分支 + PR，**Squash 合并**。
+
+模板核心是两项 HELIOS 特有检查：
+
+1. **发布通道判断（必选）**：仅 web 层（js/css/index.html）→ 可走 OTA；含 native 层（android/、Capacitor 插件）→ 必须提醒用户重装 APK（§4 教训）。
+2. **自测清单**：`check.sh` 全绿 / `build-apk.sh` 构建通过 / Web 端完整一轮冒烟（对话→线索→指控→结局）/ 真机验证（涉移动端）/ 版本号处理 / dev-brief 定稿（§3）/ 无 API Key。
+
+## 11. CI 流程（`.github/workflows/ci.yml`）
+
+触发：push 到 master、PR 到 master、手动（workflow_dispatch）；同分支新推送自动取消旧构建。
+
+| Job | 内容 | 说明 |
+|---|---|---|
+| `check` | ① `bash scripts/check.sh`（语法 + 残留引用；APK 段无 APK 自动跳过） | 与本地提交前自检同源 |
+| | ② 版本守卫：`js/version.js` ≥ `update/version.json` | 开发版不得落后于已发布 OTA 版本；发布清单提交（§5）后两者相等 |
+| | ③ OTA 清单自洽：`version.json` 字段完整、`url` 的 tag 与 `version` 一致 | 防手改清单写错下载地址 |
+| `android-build` | 内联安装 Capacitor 依赖（**package.json 不入库**）→ `bash scripts/build-apk.sh` 全流程 → 上传 `helios-build` 产物（HELIOS.apk + update.zip，保留 14 天） | CI 与本地构建同源；产物可在 Actions 页下载直接安装 |
+
+- runner（ubuntu-latest）自带 Android SDK + JDK 17；CI 内补 `python` 符号链接（build 脚本用 `python` 而非 `python3`）并 `chmod +x android/gradlew`。
+- 依赖版本与本地 `package.json` 保持一致（Capacitor 6 系）；升级依赖时**两边同步改**。
+- CI 不做：真机验证、AI 回复质量（人设层面）、OTA 发布（仅随 `publish-release.sh` 手动触发）。
